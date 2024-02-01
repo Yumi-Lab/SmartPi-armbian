@@ -3,10 +3,10 @@ on:
   push:
     branches:
       - "develop"
-  paths:
-    - "boards/**"
-    - "configs/**"
-    - ".github/workflows/**"
+    paths:
+      - "boards/**"
+      - "configs/**"
+      - ".github/workflows/**"
 
   pull_request:
     types: [opened, edited, reopened, synchronize]
