@@ -43,3 +43,40 @@ jobs:
   build:
     name: Build Images
     runs-on: ubuntu-latest
+    needs: [setup]
+    strategy:
+      fail-fast: true
+      matrix:
+        configfile: ${{ fromJson(needs.setup.outputs.configfiles) }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          path: build-configs
+          fetch-depth: 0
+
+      - name: Build
+        uses: ${{ github.workspace }}/build-configs/actions/build-image
+        with:
+          configfile: ${{ matrix.configfile }}
+
+      - name: Rename Files
+        run: |
+          cd ${{ github.workspace }}/build/output/images/
+          mv *.img armbian-${{ matrix.configfile }}.img
+          mv *.txt armbian-${{ matrix.configfile }}.txt
+
+      - name: Compressing Image
+        run: |
+          cd ${{ github.workspace }}/build/output/images/
+          xz -efkvz armbian-${{ matrix.configfile }}.img || true
+
+      - name: Calculating checksums
+        run: |
+          cd ${{ github.workspace }}/build/output/images/
+          sha256sum armbian-${{ matrix.configfile }}.img > armbian-${{ matrix.configfile }}.img.sha256
+          sha256sum armbian-${{ matrix.configfile }}.img.xz > armbian-${{ matrix.configfile }}.img.xz.sha256
+
+      - name: DEBUG
+        run: |
+          ls -l ${{ github.workspace }}/build/output/images/
