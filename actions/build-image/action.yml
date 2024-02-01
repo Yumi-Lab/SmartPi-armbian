@@ -52,7 +52,7 @@ runs:
     - name: Add custom board configuration
       shell: bash
       run: |
-        cp -RT ./build-configs/boards/* ./build/configs/boards/
+        cp -r ./build-configs/boards/ ./build/configs/boards/
 
     - name: sed VERSION
       shell: bash
