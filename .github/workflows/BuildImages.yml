@@ -25,6 +25,8 @@ jobs:
   setup:
     name: Create Matrix
     runs-on: ubuntu-latest
+    outputs:
+      configfiles: ${{ steps.set-matrix.outputs.configfiles }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -38,5 +40,6 @@ jobs:
           echo "${JSON}"
           echo "::endgroup::"
 
-    outputs:
-      configfiles: ${{ steps.set-matrix.outputs.configfiles }}
+  build:
+    name: Build Images
+    runs-on: ubuntu-latest
