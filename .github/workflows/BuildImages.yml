@@ -56,7 +56,7 @@ jobs:
           fetch-depth: 0
 
       - name: Build
-        uses: ${{ github.workspace }}/build-configs/actions/build-image
+        uses: ./build-configs/actions/build-image
         with:
           configfile: ${{ matrix.configfile }}
 
