@@ -1,0 +1,72 @@
+name: "Armbian/build"
+author: "Stefan Dej"
+description: "Build armbian images"
+inputs:
+  configfile:
+    description: "Config file name"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    #- name: Runner prepare
+    #  uses: ./actions/runner-prepare
+    - name: Free Github Runner
+      uses: descriptinc/free-disk-space@main
+      with:
+        android: true
+        dotnet: true
+        haskell: true
+        large-packages: true
+        docker-images: true
+        swap-storage: true
+
+    - name: Read configs
+      id: config
+      shell: bash
+      run: |
+        source ./build-configs/configs/config-default.conf
+        source ./build-configs/configs/smartpi1-${{ inputs.configfile }}.conf
+
+        echo "armbian_repository=${ARMBIAN_REPOSITORY}" >> $GITHUB_OUTPUT
+        echo "armbian_branch=${ARMBIAN_BRANCH}" >> $GITHUB_OUTPUT
+
+    - name: Checkout armbian Repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+        repository: ${{ steps.config.outputs.armbian_repository }}
+        ref: ${{ steps.config.outputs.armbian_branch }}
+        path: build
+
+    - name: Create config-default.conf
+      shell: bash
+      run: |
+        mkdir -p ./build/userpatches
+        cp ./build-configs/configs/config-default.conf ./build/userpatches/config-settings.conf
+        cat ./build-configs/configs/smartpi1-${{ inputs.configfile }}.conf >> ./build/userpatches/config-settings.conf
+        echo "::group::Output config-settings.conf"
+        cat ./build/userpatches/config-settings.conf
+        echo "::endgroup::"
+
+    - name: sed VERSION
+      shell: bash
+      run: |
+        sed -i 's/-trunk//' ./build/VERSION
+        echo "::group::Output VERSION"
+        cat ./build/VERSION
+        echo "::endgroup::"
+
+    - name: Build Image
+      shell: bash
+      run: |
+        cd ./build
+        ./compile.sh settings
+
+    - name: Fix userrights
+      shell: bash
+      run: |
+        WORKSPACE=$(echo ${{ github.workspace }})
+        sudo chown -R $USER:$USER $WORKSPACE/build || true
+        sudo chmod 0777 -R $WORKSPACE/build || true
+        sudo df
