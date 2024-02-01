@@ -49,6 +49,11 @@ runs:
         cat ./build/userpatches/config-settings.conf
         echo "::endgroup::"
 
+    - name: Add custom board configuration
+      shell: bash
+      run: |
+        cp -r ./build-configs/boards ./build/configs/boards
+
     - name: sed VERSION
       shell: bash
       run: |
