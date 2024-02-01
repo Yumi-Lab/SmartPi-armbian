@@ -39,4 +39,4 @@ jobs:
           echo "::endgroup::"
 
     outputs:
-      configfiles-armbian: ${{ steps.set-matrix.outputs.configfiles }}
+      configfiles: ${{ steps.set-matrix.outputs.configfiles }}
