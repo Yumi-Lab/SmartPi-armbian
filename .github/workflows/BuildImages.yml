@@ -86,7 +86,7 @@ jobs:
         run: |
           cd ${{ github.workspace }}/build/output/images/
           mv *.img ${{ steps.image_name.outputs.image_name }}.img
-          mv *.txt ${{ steps.image_name.outputs.image_name }}-.txt
+          mv *.txt ${{ steps.image_name.outputs.image_name }}.txt
 
       - name: Compressing Image
         run: |
