@@ -29,6 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       configfiles: ${{ steps.set-matrix.outputs.configfiles }}
+      time: ${{ steps.time.outputs.time }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -41,6 +42,13 @@ jobs:
           echo "::group::Build Matrix"
           echo "${JSON}"
           echo "::endgroup::"
+
+      - name: Get Time
+        id: time
+        uses: nanzm/get-time-action@v2.0
+        with:
+          timeZone: UTC
+          format: "YYYY-MM-DD-HHmm"
 
   build:
     name: Build Images
@@ -62,23 +70,43 @@ jobs:
         with:
           configfile: ${{ matrix.configfile }}
 
+      - name: Generate Name Prefix
+        id: image_name
+        shell: bash
+        run: |
+          img_name="${{ github.event.repository.name }}"
+          img_name="${img_name}-${{ matrix.configfile }}"
+          img_name="${img_name}-${{ needs.setup.outputs.time }}"
+          echo "image_name=${img_name}" >> $GITHUB_OUTPUT
+          echo "::group::Image name"
+          echo "Image name: ${img_name}"
+          echo "::endgroup::"
+
       - name: Rename Files
         run: |
           cd ${{ github.workspace }}/build/output/images/
-          mv *.img armbian-${{ matrix.configfile }}.img
-          mv *.txt armbian-${{ matrix.configfile }}.txt
+          mv *.img ${{ steps.image_name.outputs.image_name }}.img
+          mv *.txt ${{ steps.image_name.outputs.image_name }}-.txt
 
       - name: Compressing Image
         run: |
           cd ${{ github.workspace }}/build/output/images/
-          xz -efkvz armbian-${{ matrix.configfile }}.img || true
+          xz -efkvzT0 ${{ steps.image_name.outputs.image_name }}.img || true
 
       - name: Calculating checksums
         run: |
           cd ${{ github.workspace }}/build/output/images/
-          sha256sum armbian-${{ matrix.configfile }}.img > armbian-${{ matrix.configfile }}.img.sha256
-          sha256sum armbian-${{ matrix.configfile }}.img.xz > armbian-${{ matrix.configfile }}.img.xz.sha256
+          sha256sum ${{ steps.image_name.outputs.image_name }}.img > ${{ steps.image_name.outputs.image_name }}.img.sha256
+          sha256sum ${{ steps.image_name.outputs.image_name }}.img.xz > ${{ steps.image_name.outputs.image_name }}.img.xz.sha256
 
-      - name: DEBUG
-        run: |
-          ls -l ${{ github.workspace }}/build/output/images/
+      - name: Upload compressed image
+        uses: actions/upload-artifact@v4.3.0
+        with:
+          name: ${{ steps.image_name.outputs.image_name }}.img.xz
+          path: ${{ github.workspace }}/build/output/images/${{ steps.image_name.outputs.image_name }}.img.xz
+
+      - name: Upload compressed image
+        uses: actions/upload-artifact@v4.3.0
+        with:
+          name: ${{ steps.image_name.outputs.image_name }}.img.xz.sha256
+          path: ${{ github.workspace }}/build/output/images/${{ steps.image_name.outputs.image_name }}.img.xz.sha256
