@@ -110,3 +110,9 @@ jobs:
         with:
           name: ${{ steps.image_name.outputs.image_name }}.img.xz.sha256
           path: ${{ github.workspace }}/build/output/images/${{ steps.image_name.outputs.image_name }}.img.xz.sha256
+
+      - name: Upload Build Summary
+        uses: actions/upload-artifact@v4.3.0
+        with:
+          name: ${{ steps.image_name.outputs.image_name }}.txt
+          path: ${{ github.workspace }}/build/output/images/${{ steps.image_name.outputs.image_name }}.txt
