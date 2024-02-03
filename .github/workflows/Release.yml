@@ -73,7 +73,7 @@ jobs:
           time="${{ steps.time.outputs.time }}"
           version="$(cat ${{ github.workspace }}/build/VERSION)"
           version="${version/-trunk/}"
-          echo "release_tag=${version}-${time}" >> $GITHUB_OUPUT
+          echo "release_tag=${version}-${time}" >> $GITHUB_OUTPUT
 
       - name: Create empty release
         id: release
@@ -184,7 +184,7 @@ jobs:
           draft: true
 
   finish:
-    name: Finish BuildTrain
+    name: Finish release
     needs: [release, build]
     runs-on: ubuntu-latest
     steps:
@@ -196,7 +196,7 @@ jobs:
           id: ${{ needs.release.outputs.id }}
 
   cleanup:
-    name: Cleanup BuildTrain
+    name: Cleanup
     needs: [release, build]
     if: ${{ always() }}
     runs-on: ubuntu-latest
