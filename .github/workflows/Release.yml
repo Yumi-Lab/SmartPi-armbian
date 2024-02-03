@@ -151,7 +151,6 @@ jobs:
       - name: Calculating checksums
         run: |
           cd ${{ github.workspace }}/build/output/images/
-          sha256sum ${{ steps.image_name.outputs.image_name }}.img > ${{ steps.image_name.outputs.image_name }}.img.sha256
           sha256sum ${{ steps.image_name.outputs.image_name }}.img.xz > ${{ steps.image_name.outputs.image_name }}.img.xz.sha256
 
       - name: Upload Image to Release
