@@ -1,0 +1,209 @@
+name: Release Images
+on:
+  push:
+    branches:
+      - "main"
+    paths:
+      - "boards/**"
+      - "configs/**"
+
+  workflow_dispatch:
+
+concurrency:
+  group: ci-buildtrain-${{ github.ref }}-1
+  cancel-in-progress: true
+
+jobs:
+  update-main-branch:
+    name: Update main branch
+    runs-on: ubuntu-latest
+    steps:
+      - uses: everlytic/branch-merge@1.1.5
+        with:
+          github_token: ${{ secrets.PAT }}
+          source_ref: "develop"
+          target_branch: "main"
+          commit_message_template: "[Automated] Merged {source_ref} into target {target_branch}"
+
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [update-main-branch]
+    outputs:
+      id: ${{ steps.release.outputs.id }}
+      release_tag: ${{ steps.release_tag.outputs.release_tag }}
+    steps:
+      - name: Get Time
+        id: time
+        uses: nanzm/get-time-action@v2.0
+        with:
+          timeZone: UTC
+          format: "YYYYMMDD-HHmm"
+
+      - name: Checkout main branch
+        uses: actions/checkout@v4
+        with:
+          ref: "main"
+          path: "repository"
+
+      - name: Setup armbian repository
+        id: armbian
+        shell: bash
+        run: |
+          source ${{ github.workspace }}/repository/configs/config-default.conf
+          echo "armbian_repository=${ARMBIAN_REPOSITORY}" >> $GITHUB_OUTPUT
+          echo "armbian_branch=${ARMBIAN_BRANCH}" >> $GITHUB_OUTPUT
+          echo "::group::Armbian info"
+          echo "Use repository: ${ARMBIAN_REPOSITORY}"
+          echo "Build uses branch: ${ARMBIAN_BRANCH}"
+          echo "::endgroup::"
+
+      - name: Checkout armbian Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          repository: ${{ steps.armbian.outputs.armbian_repository }}
+          ref: ${{ steps.armbian.outputs.armbian_branch }}
+          path: build
+
+      - name: Set release tag
+        id: release_tag
+        shell: bash
+        run: |
+          time="${{ steps.time.outputs.time }}"
+          version="$(cat ${{ github.workspace }}/build/VERSION)"
+          version="${version/-trunk/}"
+          echo "release_tag=${version}-${time}" >> $GITHUB_OUPUT
+
+      - name: Create empty release
+        id: release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: ${{ steps.release_tag.outputs.release_tag }}
+          tag_name: ${{ steps.time.outputs.time }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          draft: true
+
+  setup:
+    name: Create Matrix
+    runs-on: ubuntu-latest
+    outputs:
+      configfiles: ${{ steps.set-matrix.outputs.configfiles }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: "main"
+
+      - name: Create Matrix
+        id: set-matrix
+        run: |
+          JSON=$(find ${{ github.workspace }}/configs -type f -name "smartpi1-*.conf" -printf '%f\n' | sed 's#smartpi1-##;s#.conf##' | jq -R -s -c 'split("\n")[:-1]')
+          echo "configfiles=${JSON}" >> $GITHUB_OUTPUT
+          echo "::group::Build Matrix"
+          echo "${JSON}"
+          echo "::endgroup::"
+
+  build:
+    name: Build Images
+    runs-on: ubuntu-latest
+    needs: [release, setup]
+    strategy:
+      fail-fast: true
+      matrix:
+        configfile: ${{ fromJson(needs.setup.outputs.configfiles) }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          ref: "main"
+          path: build-configs
+          fetch-depth: 0
+
+      - name: Build
+        uses: ./build-configs/actions/build-image
+        with:
+          configfile: ${{ matrix.configfile }}
+
+      - name: Generate Name Prefix
+        id: image_name
+        shell: bash
+        run: |
+          img_name="${{ github.event.repository.name }}"
+          img_name="${img_name}-${{ matrix.configfile }}"
+          echo "image_name=${img_name}" >> $GITHUB_OUTPUT
+          echo "::group::Image name"
+          echo "Image name: ${img_name}"
+          echo "::endgroup::"
+
+      - name: Rename Files
+        run: |
+          cd ${{ github.workspace }}/build/output/images/
+          mv *.img ${{ steps.image_name.outputs.image_name }}.img
+          mv *.txt ${{ steps.image_name.outputs.image_name }}.txt
+
+      - name: Compressing Image
+        run: |
+          cd ${{ github.workspace }}/build/output/images/
+          xz -efkvzT0 ${{ steps.image_name.outputs.image_name }}.img || true
+
+      - name: Calculating checksums
+        run: |
+          cd ${{ github.workspace }}/build/output/images/
+          sha256sum ${{ steps.image_name.outputs.image_name }}.img > ${{ steps.image_name.outputs.image_name }}.img.sha256
+          sha256sum ${{ steps.image_name.outputs.image_name }}.img.xz > ${{ steps.image_name.outputs.image_name }}.img.xz.sha256
+
+      - name: Upload Image to Release
+        if: needs.release.outputs.release_tag != ''
+        uses: xresloader/upload-to-github-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          release_id: ${{ needs.release.outputs.release_tag }}
+          file: ./build/output/images/*.img.xz
+          draft: true
+
+      - name: Upload Checksum to Release
+        if: needs.release.outputs.release_tag != ''
+        uses: xresloader/upload-to-github-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          release_id: ${{ needs.release.outputs.release_tag }}
+          file: ./build/output/images/*.sha256
+          draft: true
+
+      - name: Upload Config to Release
+        if: needs.release.outputs.release_tag != ''
+        uses: xresloader/upload-to-github-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          release_id: ${{ needs.release.outputs.release_tag }}
+          file: ./build/output/images/*.txt
+          draft: true
+
+  finish:
+    name: Finish BuildTrain
+    needs: [release, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish Release
+        uses: StuYarrow/publish-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          id: ${{ needs.release.outputs.id }}
+
+  cleanup:
+    name: Cleanup BuildTrain
+    needs: [release, build]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete drafts
+        uses: hugo19941994/delete-draft-releases@v1.0.0
+        with:
+          threshold: 2d
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
