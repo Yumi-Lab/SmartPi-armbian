@@ -154,32 +154,32 @@ jobs:
           sha256sum ${{ steps.image_name.outputs.image_name }}.img.xz > ${{ steps.image_name.outputs.image_name }}.img.xz.sha256
 
       - name: Upload Image to Release
-        if: needs.release.outputs.release_tag != ''
+        if: needs.release.outputs.id != ''
         uses: xresloader/upload-to-github-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          release_id: ${{ needs.release.outputs.release_tag }}
+          release_id: ${{ needs.release.outputs.id }}
           file: ./build/output/images/*.img.xz
           draft: true
 
       - name: Upload Checksum to Release
-        if: needs.release.outputs.release_tag != ''
+        if: needs.release.outputs.id != ''
         uses: xresloader/upload-to-github-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          release_id: ${{ needs.release.outputs.release_tag }}
+          release_id: ${{ needs.release.outputs.id }}
           file: ./build/output/images/*.sha256
           draft: true
 
       - name: Upload Config to Release
-        if: needs.release.outputs.release_tag != ''
+        if: needs.release.outputs.id != ''
         uses: xresloader/upload-to-github-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          release_id: ${{ needs.release.outputs.release_tag }}
+          release_id: ${{ needs.release.outputs.id }}
           file: ./build/output/images/*.txt
           draft: true
 
