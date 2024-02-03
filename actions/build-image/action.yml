@@ -52,7 +52,7 @@ runs:
     - name: Add custom board configuration
       shell: bash
       run: |
-        cp ./build-configs/boards/smartpi1.wip ./build/config/boards/smartpi1.wip
+        cp -r ./build-configs/boards ./build/config/boards
 
     - name: sed VERSION
       shell: bash
