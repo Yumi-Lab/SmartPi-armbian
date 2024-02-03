@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ci-buildtrain-${{ github.ref }}-1
+  group: ci-release-${{ github.ref }}-1
   cancel-in-progress: true
 
 jobs:
@@ -32,6 +32,7 @@ jobs:
     outputs:
       id: ${{ steps.release.outputs.id }}
       release_tag: ${{ steps.release_tag.outputs.release_tag }}
+      tag_name: ${{ steps.time.outputs.time }}
     steps:
       - name: Get Time
         id: time
