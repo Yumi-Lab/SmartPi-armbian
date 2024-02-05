@@ -63,7 +63,7 @@ runs:
       shell: bash
       run: |
         if [[ -d ./build-configs/userpatches ]]; then
-          cp -R -v ./build-configs/userpatches/* ./build/config/userpatches
+          cp -R -v ./build-configs/userpatches/* ./build/userpatches
         else
           echo -e "\e[0;33mNo custom userpatches found ... [SKIPPED]\e[0m"
           exit 0
