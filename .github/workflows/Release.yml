@@ -130,7 +130,7 @@ jobs:
         id: image_name
         shell: bash
         run: |
-          img_name="${{ github.event.repository.name }}"
+          img_name="armbian"
           img_name="${img_name}-${{ matrix.configfile }}"
           echo "image_name=${img_name}" >> $GITHUB_OUTPUT
           echo "::group::Image name"
