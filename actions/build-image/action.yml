@@ -26,7 +26,7 @@ runs:
       shell: bash
       run: |
         source ./build-configs/configs/config-default.conf
-        source ./build-configs/configs/smartpi1-${{ inputs.configfile }}.conf
+        source ./build-configs/configs/${{ inputs.configfile }}.conf
 
         echo "armbian_repository=${ARMBIAN_REPOSITORY}" >> $GITHUB_OUTPUT
         echo "armbian_branch=${ARMBIAN_BRANCH}" >> $GITHUB_OUTPUT
@@ -44,7 +44,7 @@ runs:
       run: |
         mkdir -p ./build/userpatches
         cp ./build-configs/configs/config-default.conf ./build/userpatches/config-settings.conf
-        cat ./build-configs/configs/smartpi1-${{ inputs.configfile }}.conf >> ./build/userpatches/config-settings.conf
+        cat ./build-configs/configs/${{ inputs.configfile }}.conf >> ./build/userpatches/config-settings.conf
         echo "::group::Output config-settings.conf"
         cat ./build/userpatches/config-settings.conf
         echo "::endgroup::"
