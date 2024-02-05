@@ -12,9 +12,6 @@
 # userpatches/overlay directory on host is bind-mounted to /tmp/overlay in chroot
 # The sd card's root path is accessible via $SDCARD variable.
 
-# shellcheck enable=requires-variable-braces
-# shellcheck disable=SC2034
-
 RELEASE=$1
 LINUXFAMILY=$2
 BOARD=$3
