@@ -130,7 +130,8 @@ jobs:
         id: image_name
         shell: bash
         run: |
-          img_name="armbian"
+          source ./build-configs/configs/config-default.conf
+          img_name="${VENDOR}"
           img_name="${img_name}-${{ matrix.configfile }}"
           echo "image_name=${img_name}" >> $GITHUB_OUTPUT
           echo "::group::Image name"
