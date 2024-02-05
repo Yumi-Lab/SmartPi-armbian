@@ -37,7 +37,7 @@ jobs:
       - name: Create Matrix
         id: set-matrix
         run: |
-          JSON=$(find ${{ github.workspace }}/configs -type f -name "*.conf" -printf '%f\n' | sed 's#smartpi1-##;s#.conf##' | jq -R -s -c 'split("\n")[:-1]')
+          JSON=$(find ${{ github.workspace }}/configs -type f -name "*.conf" -printf '%f\n' | sed '/*default/d;s#smartpi1-##;s#.conf##' | jq -R -s -c 'split("\n")[:-1]')
           echo "configfiles=${JSON}" >> $GITHUB_OUTPUT
           echo "::group::Build Matrix"
           echo "${JSON}"
