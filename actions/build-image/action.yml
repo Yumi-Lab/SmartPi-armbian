@@ -52,7 +52,22 @@ runs:
     - name: Add custom board configuration
       shell: bash
       run: |
-        cp -R ./build-configs/boards/* ./build/config/boards
+        if [[ -d ./build-configs/boards ]]; then
+          cp -R -v ./build-configs/boards/* ./build/config/boards
+        else
+          echo -e "\e[0;33mNo custom board configuration found ... [SKIPPED]\e[0m"
+          exit 0
+        fi
+
+    - name: Add custom userpatches
+      shell: bash
+      run: |
+        if [[ -d ./build-configs/userpatches ]]; then
+          cp -R -v ./build-configs/userpatches/* ./build/config/userpatches
+        else
+          echo -e "\e[0;33mNo custom userpatches found ... [SKIPPED]\e[0m"
+          exit 0
+        fi
 
     - name: sed VERSION
       shell: bash
