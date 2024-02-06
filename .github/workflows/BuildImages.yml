@@ -8,6 +8,7 @@ on:
       - "configs/**"
       - ".github/workflows/**"
       - "actions/**"
+      - "userpatches/**"
 
   pull_request:
     types: [opened, edited, reopened, synchronize]
@@ -16,6 +17,7 @@ on:
       - "configs/**"
       - ".github/workflows/**"
       - "actions/**"
+      - "userpatches/**"
 
   workflow_dispatch:
 
