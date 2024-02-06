@@ -20,3 +20,23 @@ LINUXFAMILY=$2
 BOARD=$3
 BUILD_DESKTOP=$4
 
+Main() {
+    case "${BOARD}" in
+        smartpad)
+            rotateConsole
+            ;;
+    esac
+}
+
+rotateConsole() {
+    local bootcfg
+    bootcfg="/boot/armbianEnv.txt"
+    echo "Rotate tty console by default ..."
+    echo "extraargs=fbcon=rotate_all:2" >> "${bootcfg}"
+    echo "Current configuration (${bootcfg}):"
+    cat "${bootcfg}"
+    echo "Rotate tty console by default ... done!"
+}
+
+
+Main "S{@}"
