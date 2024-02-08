@@ -24,6 +24,8 @@ Main() {
     case "${BOARD}" in
         smartpad)
             rotateConsole
+            rotateScreen
+            rotateTouch
             ;;
     esac
 }
@@ -32,11 +34,41 @@ rotateConsole() {
     local bootcfg
     bootcfg="/boot/armbianEnv.txt"
     echo "Rotate tty console by default ..."
-    echo "extraargs=fbcon=rotate_all:2" >> "${bootcfg}"
+    echo "extraargs=fbcon=rotate:2" >> "${bootcfg}"
     echo "Current configuration (${bootcfg}):"
     cat "${bootcfg}"
     echo "Rotate tty console by default ... done!"
 }
 
+rotateScreen() {
+    file="/etc/X11/xorg.conf.d/02-smartpad-rotated.conf"
+    echo "Rotate Monitor by default ..."
+    echo "Create ${file} ..."
+    cat << EOF > "${file}"
+Section "Monitor"
+    Identifier "HDMI-1"
+    Option "Rotate" "inverted"
+EndSection
+EOF
+    echo "File contents:"
+    cat "${file}"
+}
+
+rotateTouch() {
+    file="/etc/X11/xorg.conf.d/99-Touch-rotated.conf"
+    echo "Rotate Touch by default ..."
+    echo "Create ${file} ..."
+    cat << EOF > "${file}"
+Section "InputClass"
+    Identifier "evdev touchscreen catchall"
+    MatchIsTouchscreen "on"
+    MatchDevicePath "/dev/input/event*"
+    Driver "evdev"
+    Option "CalibrationMatrix" "-1 0 1 0 -1 1 0 0 1"
+EndSection
+EOF
+    echo "File contents:"
+    cat "${file}"
+}
 
 Main "S{@}"
