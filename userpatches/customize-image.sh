@@ -26,6 +26,9 @@ Main() {
             rotateConsole
             rotateScreen
             rotateTouch
+            if [[ "${BUILD_DESKTOP}" = "yes" ]]; then
+                addSmartPadPkgs
+            fi
             ;;
     esac
 }
@@ -69,6 +72,13 @@ EndSection
 EOF
     echo "File contents:"
     cat "${file}"
+}
+
+addSmartPadPkgs() {
+    local pkgs
+    pkgs=(firefox-esr onboard)
+    echo "Install browser and OnScreenKeyboard ..."
+    apt install -y "${pkgs[@]}"
 }
 
 Main "S{@}"
