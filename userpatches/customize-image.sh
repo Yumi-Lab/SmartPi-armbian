@@ -78,7 +78,10 @@ addSmartPadPkgs() {
     local pkgs
     pkgs=(firefox-esr onboard)
     echo "Install browser and OnScreenKeyboard ..."
-    apt install -y "${pkgs[@]}"
+    apt update --allow-releaseinfo-change
+    apt install -yy "${pkgs[@]}"
+    apt clean -y
+    apt autoclean -y
 }
 
 Main "S{@}"
