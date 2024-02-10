@@ -89,7 +89,7 @@ cleanUpFix() {
     cleanDirs=(/var/cache/apt /var/lib/apt/lists)
     echo "Start Clean up sequence ..."
     for dir in "${cleanDirs[@]}"; do
-        rm -rfv "${SDCARD}/${dir:?}/*"
+        rm -rfv "${dir:?}/*"
     done
     echo "Finished Clean up ..."
 }
