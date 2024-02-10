@@ -28,6 +28,7 @@ Main() {
             rotateTouch
             if [[ "${BUILD_DESKTOP}" = "yes" ]]; then
                 addSmartPadPkgs
+                cleanUpFix
             fi
             ;;
     esac
@@ -82,6 +83,15 @@ addSmartPadPkgs() {
     apt install -yy "${pkgs[@]}"
     apt clean -y
     apt autoclean -y
+}
+
+cleanUpFix() {
+    cleanDirs=(/var/cache/apt /var/lib/apt/lists)
+    echo "Start Clean up sequence ..."
+    for dir in "${cleanDirs[@]}"; do
+        rm -rfv "${SDCARD}/${dir:?}/*"
+    done
+    echo "Finished Clean up ..."
 }
 
 Main "S{@}"
