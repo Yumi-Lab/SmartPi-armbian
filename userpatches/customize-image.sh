@@ -26,10 +26,6 @@ Main() {
             rotateConsole
             rotateScreen
             rotateTouch
-            if [[ "${BUILD_DESKTOP}" = "yes" ]]; then
-                addSmartPadPkgs
-                cleanUpFix
-            fi
             ;;
     esac
 }
@@ -73,25 +69,6 @@ EndSection
 EOF
     echo "File contents:"
     cat "${file}"
-}
-
-addSmartPadPkgs() {
-    local pkgs
-    pkgs=(firefox-esr onboard)
-    echo "Install browser and OnScreenKeyboard ..."
-    apt update --allow-releaseinfo-change
-    apt install -yy "${pkgs[@]}"
-    apt clean -y
-    apt autoclean -y
-}
-
-cleanUpFix() {
-    cleanDirs=(/var/cache/apt /var/lib/apt/lists)
-    echo "Start Clean up sequence ..."
-    for dir in "${cleanDirs[@]}"; do
-        rm -rfv "${dir:?}/*"
-    done
-    echo "Finished Clean up ..."
 }
 
 Main "S{@}"
