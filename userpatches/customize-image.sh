@@ -27,6 +27,8 @@ Main() {
             rotateScreen
             rotateTouch
             patchLightdm
+            copyOnboardConf
+            patchOnboardAutostart
             ;;
     esac
 }
@@ -76,7 +78,24 @@ patchLightdm() {
     local conf
     conf="/etc/lightdm/lightdm.conf.d/12-onboard.conf"
     echo "Enable OnScreen Keyboard in Lightdm ..."
-    echo "onscreen-keyboard = true" > "${conf}"
+    echo "onscreen-keyboard = true" | tee "${conf}"
+    echo "Enable OnScreen Keyboard in Lightdm ... [DONE]"
 }
+
+copyOnboardConf() {
+    echo "Copy onboard default configuration ..."
+    mkdir -p /etc/onboard
+    cp -v /tmp/overlay/onboard-defaults.conf /etc/onboard/
+    echo "Copy onboard default configuration ... [DONE]"
+}
+
+patchOnboardAutostart() {
+    local conf
+    conf="/etc/xdg/autostart/onboard-autostart.desktop"
+    echo "Patch Onboard Autostart file ..."
+    sed -i '/OnlyShowIn/s/^/# /' "${conf}"
+    echo "Patch Onboard Autostart file ... [DONE]"
+}
+
 
 Main "S{@}"
