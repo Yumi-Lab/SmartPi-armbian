@@ -26,6 +26,7 @@ Main() {
             rotateConsole
             rotateScreen
             rotateTouch
+            patchLightdm
             ;;
     esac
 }
@@ -69,6 +70,13 @@ EndSection
 EOF
     echo "File contents:"
     cat "${file}"
+}
+
+patchLightdm() {
+    local conf
+    conf="/etc/lightdm/lightdm.conf.d/12-onboard.conf"
+    echo "Enable OnScreen Keyboard in Lightdm ..."
+    echo "onscreen-keyboard = true" > "${conf}"
 }
 
 Main "S{@}"
