@@ -26,9 +26,11 @@ Main() {
             rotateConsole
             rotateScreen
             rotateTouch
-            patchLightdm
-            copyOnboardConf
-            patchOnboardAutostart
+            if [[ "${BUILD_DESKTOP}" = "yes" ]]; then
+                patchLightdm
+                copyOnboardConf
+                patchOnboardAutostart
+            fi
             ;;
     esac
 }
@@ -44,34 +46,23 @@ rotateConsole() {
 }
 
 rotateScreen() {
-    file="/etc/X11/xorg.conf.d/02-smartpad-rotated.conf"
-    echo "Rotate Monitor by default ..."
-    echo "Create ${file} ..."
-    cat << EOF > "${file}"
-Section "Monitor"
-    Identifier "HDMI-1"
-    Option "Rotate" "inverted"
-EndSection
-EOF
-    echo "File contents:"
-    cat "${file}"
+    src="/tmp/overlay/03-smartpad-rotate-screen.conf"
+    dest="/etc/X11/xorg.conf.d/"
+    echo "Install rotated screen configuration ..."
+    cp -v "${src}" "${dest}"
+    echo "DEBUG:"
+    ls -l "${dest}"
+    echo "Install rotated screen configuration ... [DONE]"
 }
 
 rotateTouch() {
-    file="/etc/X11/xorg.conf.d/99-Touch-rotated.conf"
-    echo "Rotate Touch by default ..."
-    echo "Create ${file} ..."
-    cat << EOF > "${file}"
-Section "InputClass"
-    Identifier "evdev touchscreen catchall"
-    MatchIsTouchscreen "on"
-    MatchDevicePath "/dev/input/event*"
-    Driver "evdev"
-    Option "CalibrationMatrix" "-1 0 1 0 -1 1 0 0 1"
-EndSection
-EOF
-    echo "File contents:"
-    cat "${file}"
+    src="/tmp/overlay/03-smartpad-rotate-touch.conf"
+    dest="/etc/X11/xorg.conf.d/"
+    echo "Install rotated touch configuration ..."
+    cp -v "${src}" "${dest}"
+    echo "DEBUG:"
+    ls -l "${dest}"
+    echo "Install rotated touch configuration ... [DONE]"
 }
 
 patchLightdm() {
@@ -96,6 +87,5 @@ patchOnboardAutostart() {
     sed -i '/OnlyShowIn/s/^/# /' "${conf}"
     echo "Patch Onboard Autostart file ... [DONE]"
 }
-
 
 Main "S{@}"
