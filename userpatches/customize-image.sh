@@ -30,6 +30,7 @@ Main() {
                 patchLightdm
                 copyOnboardConf
                 patchOnboardAutostart
+                installScreensaverSetup
             fi
             ;;
     esac
