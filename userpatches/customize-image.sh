@@ -88,4 +88,14 @@ patchOnboardAutostart() {
     echo "Patch Onboard Autostart file ... [DONE]"
 }
 
+installScreensaverSetup() {
+    src="/tmp/overlay/skel-xscreensaver"
+    dest="/etc/skel/.xscreensaver"
+    echo "Install rotated touch configuration ..."
+    \cp -fv "${src}" "${dest}"
+    echo "DEBUG:"
+    ls -l "$(dirname ${dest})"
+    echo "Install rotated touch configuration ... [DONE]"
+}
+
 Main "S{@}"

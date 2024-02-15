@@ -1,0 +1,13 @@
+# Blanking Setup
+
+timeout: 00:01:00
+cycle: 00:00:00
+lock: False
+dpmsEnabled: True
+dpmsQuickOff: True
+splash: False
+nice: 10
+fade: True
+unfade: True
+fadeSeconds: 2
+mode: blank
