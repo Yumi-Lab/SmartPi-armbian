@@ -46,7 +46,7 @@ rotateConsole() {
 }
 
 rotateScreen() {
-    src="/tmp/overlay/03-smartpad-rotate-screen.conf"
+    src="/tmp/overlay/02-smartpad-rotate-screen.conf"
     dest="/etc/X11/xorg.conf.d/"
     echo "Install rotated screen configuration ..."
     cp -v "${src}" "${dest}"
