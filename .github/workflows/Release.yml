@@ -1,12 +1,5 @@
 name: Release Images
 on:
-  push:
-    branches:
-      - "main"
-    paths:
-      - "boards/**"
-      - "configs/**"
-
   workflow_dispatch:
 
 concurrency:
@@ -88,6 +81,7 @@ jobs:
   setup:
     name: Create Matrix
     runs-on: ubuntu-latest
+    needs: [update-main-branch, release]
     outputs:
       configfiles: ${{ steps.set-matrix.outputs.configfiles }}
     steps:
@@ -108,7 +102,7 @@ jobs:
   build:
     name: Build Images
     runs-on: ubuntu-latest
-    needs: [release, setup]
+    needs: [update-main-branch, release, setup]
     strategy:
       fail-fast: true
       matrix:
