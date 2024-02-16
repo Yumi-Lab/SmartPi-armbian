@@ -19,9 +19,8 @@ SmartPi-armbian is a custom image builder for SmartPi devices, leveraging the Ar
 To begin using SmartPi-armbian, follow these steps:
 
 1. Clone the repository to your local machine.
-2. Navigate to the `actions/build-image` directory.
+2. Navigate to the `configs` directory.
 3. Customize the configuration files in the `configs` directory as needed.
-4. Run the build script to create your custom image.
 
 ## Usage
 
