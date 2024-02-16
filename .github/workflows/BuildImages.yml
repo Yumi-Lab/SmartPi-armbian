@@ -6,7 +6,7 @@ on:
     paths:
       - "boards/**"
       - "configs/**"
-      - ".github/workflows/**"
+      - ".github/workflows/BuildImages.yml"
       - "actions/**"
       - "userpatches/**"
 
