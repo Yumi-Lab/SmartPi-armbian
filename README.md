@@ -47,7 +47,7 @@ This project is licensed under the GPL-3.0 License. See the [LICENSE](LICENSE) f
 
 ## Disclaimer
 
-This project is based on the work of [meteyou](https://github.com/meteyou), specifically the `mainsail-crew/armbianbuilds` project.
+This project is based on the work of [meteyou](https://github.com/meteyou), specifically the `mainsail-crew/armbian-builds` project.
 It has been modified by [KwadFan](https://github.com/KwadFan) to fit the specific needs of Yumi.
 Please note that while the original work by meteyou is open-source and licensed under the GPL-3.0, modifications made by KwadFan may be subject to additional terms and conditions. Always review the license and any additional documentation provided by the repository maintainers for the most accurate information.
 
