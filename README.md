@@ -18,18 +18,19 @@ SmartPi-armbian is a custom image builder for SmartPi devices, leveraging the Ar
 
 To begin using SmartPi-armbian, follow these steps:
 
-1. Clone the repository to your local machine.
-2. Navigate to the `configs` directory.
-3. Customize the configuration files in the `configs` directory as needed.
+1. Fork the repository.
+2. Clone the repository to your local machine.
+3. Navigate to the `configs` directory.
+4. Customize the configuration files in the `configs` directory as needed.
+5. Push your changes to your fork.
 
 ## Usage
 
 The build process is automated using GitHub Actions. To start the build process:
 
-1. Fork the repository.
-2. Go to the Actions tab.
-3. Select the build workflow.
-4. Click on "Run workflow" and follow the prompts.
+1. Go to the Actions tab.
+2. Select the build workflow.
+3. Click on "Run workflow" and follow the prompts.
 
 ## Contribution
 
