@@ -95,7 +95,7 @@ installScreensaverSetup() {
     echo "Install rotated touch configuration ..."
     \cp -fv "${src}" "${dest}"
     echo "DEBUG:"
-    ls -l "$(dirname ${dest})"
+    ls -al "$(dirname ${dest})"
     echo "Install rotated touch configuration ... [DONE]"
 }
 
