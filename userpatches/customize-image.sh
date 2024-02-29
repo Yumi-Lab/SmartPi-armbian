@@ -26,6 +26,7 @@ Main() {
             rotateConsole
             rotateScreen
             rotateTouch
+            disableDPMS
             if [[ "${BUILD_DESKTOP}" = "yes" ]]; then
                 patchLightdm
                 copyOnboardConf
@@ -58,6 +59,16 @@ rotateScreen() {
 
 rotateTouch() {
     src="/tmp/overlay/03-smartpad-rotate-touch.conf"
+    dest="/etc/X11/xorg.conf.d/"
+    echo "Install rotated touch configuration ..."
+    cp -v "${src}" "${dest}"
+    echo "DEBUG:"
+    ls -l "${dest}"
+    echo "Install rotated touch configuration ... [DONE]"
+}
+
+disableDPMS() {
+    src="/tmp/overlay/04-smartpad-disable-dpms.conf"
     dest="/etc/X11/xorg.conf.d/"
     echo "Install rotated touch configuration ..."
     cp -v "${src}" "${dest}"
