@@ -115,55 +115,114 @@ installScreensaverSetup() {
 
 fixsunxi() {
     echo "Fix sunxi ..."
-        # Définir la version souhaitée du kernel
-        TARGET_KERNEL="6.6.16-current-sunxi"
+    echo "Télécharger et stocker les fichiers kernel"
+    # Répertoire où stocker les fichiers kernel
+    mkdir -p /opt/kernel_deb
 
-        # Récupérer la version actuelle du kernel
-        CURRENT_KERNEL=$(uname -r)
+    # URL des fichiers sur GitHub
+    GITHUB_REPO="https://github.com/Yumi-Lab/SmartPi-armbian/tree/develop/userpatches/header"
 
-        echo "Vérification de la version actuelle du kernel..."
-        echo "Kernel actuel : $CURRENT_KERNEL"
-        echo "Kernel souhaité : $TARGET_KERNEL"
+    echo "📥 Téléchargement des fichiers kernel depuis GitHub..."
 
-        if [ "$CURRENT_KERNEL" != "$TARGET_KERNEL" ]; then
-            echo "Le kernel actuel ne correspond pas. Correction en cours..."
-            
-            # Supprimer les headers et le kernel actuels s'ils sont incorrects
-            sudo apt remove --purge -y linux-image-current-sunxi linux-headers-current-sunxi linux-libc-dev
-            
-            # Réinstaller la bonne version
-            sudo apt install -y linux-image-current-sunxi=24.2.1 linux-headers-current-sunxi=24.2.1
-            
-            # Mettre à jour GRUB
-            echo "Mise à jour de GRUB..."
-            sudo update-grub
-            
-            echo "Redémarrage du système..."
-            sudo reboot
-        else
-            echo "Le kernel est déjà correct. Blocage des mises à jour..."
-            
-            # Bloquer la mise à jour du kernel et des headers
-            sudo apt-mark hold linux-image-current-sunxi linux-headers-current-sunxi linux-libc-dev
-            
-            # Empêcher les mises à jour avec un fichier de préférences
-            echo "Création du fichier de préférences APT..."
-            sudo bash -c 'cat <<EOF > /etc/apt/preferences.d/no-kernel-upgrade
-        Package: linux-image-*
-        Pin: release *
-        Pin-Priority: -1
+    wget -O /opt/kernel_deb/linux-image-current-sunxi.deb "$GITHUB_REPO/linux-image-current-sunxi_24.2.1_armhf.deb"
+    wget -O /opt/kernel_deb/linux-headers-current-sunxi.deb "$GITHUB_REPO/linux-headers-current-sunxi_24.2.1_armhf.deb"
 
-        Package: linux-headers-*
-        Pin: release *
-        Pin-Priority: -1
+    # Vérification des fichiers
+    if [ ! -f /opt/kernel_deb/linux-image-current-sunxi.deb ] || [ ! -f /opt/kernel_deb/linux-headers-current-sunxi.deb ]; then
+        echo "❌ Erreur : Impossible de télécharger les fichiers kernel depuis GitHub."
+        exit 1
+    fi
 
-        Package: linux-libc-dev
-        Pin: release *
-        Pin-Priority: -1
-        EOF'
+    echo "✅ Fichiers kernel téléchargés avec succès !"
+echo "Créer le script oneshot pour le premier démarrage"
+cat << 'EOF' > /opt/kernel_deb/install_kernel.sh
+    #!/bin/bash
 
-            echo "Le kernel est maintenant verrouillé et ne sera plus mis à jour."
-        fi
+    echo "🔧 Installation du kernel custom..."
+
+    # Vérification de la présence des fichiers
+    if [ ! -f /opt/kernel_deb/linux-image-current-sunxi.deb ] || [ ! -f /opt/kernel_deb/linux-headers-current-sunxi.deb ]; then
+        echo "❌ Fichiers kernel introuvables. Annulation."
+        exit 1
+    fi
+
+    # Installation du kernel et des headers
+    echo "⚙️ Installation en cours..."
+    sudo dpkg -i /opt/kernel_deb/linux-image-current-sunxi.deb
+    sudo dpkg -i /opt/kernel_deb/linux-headers-current-sunxi.deb
+
+    # Vérification de l'installation
+    if [ $? -ne 0 ]; then
+        echo "❌ Erreur lors de l'installation des paquets. Abandon."
+        exit 1
+    fi
+
+    # Nettoyage après installation
+    echo "🧹 Suppression des fichiers kernel installés..."
+    rm -rf /opt/kernel_deb/
+
+    # Redémarrage du système
+    echo "🔄 Redémarrage du système pour appliquer les changements..."
+    sudo reboot
+
+EOF
+chmod +x /opt/kernel_deb/install_kernel.sh
+echo "Ajouter le script oneshot au premier démarrage"
+cat << 'EOF' > /etc/systemd/system/kernel-setup.service
+[Unit]
+Description=Installation du kernel custom au premier démarrage
+Wants=network.target
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/kernel_deb/install_kernel.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+
+EOF
+systemctl enable kernel-setup.service
+echo "Ajouter la configuration système après le reboot"
+cat << 'EOF' > /opt/first_boot_setup.sh
+#!/bin/bash
+
+echo "🛠 Configuration initiale du système..."
+
+# Votre configuration ici
+# Exemple :
+echo "📦 Mise à jour des paquets..."
+sudo apt update && sudo apt upgrade -y
+
+# Nettoyage et suppression du service oneshot
+echo "🧹 Suppression du service kernel-setup..."
+sudo systemctl disable kernel-setup.service
+sudo rm /etc/systemd/system/kernel-setup.service
+
+# Redémarrage final après configuration
+echo "🔄 Redémarrage final..."
+sudo reboot
+
+EOF
+chmod +x /opt/first_boot_setup.sh
+echo "Créer un service systemd pour exécuter le script après le reboot"
+cat << 'EOF' > /etc/systemd/system/first-boot.service
+[Unit]
+Description=Configuration initiale du système après le premier boot
+Wants=network.target
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/first_boot_setup.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+
+EOF
+systemctl enable first-boot.service
 
     echo "Fix sunxi ... [DONE]"
 }
