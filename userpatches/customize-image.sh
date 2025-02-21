@@ -162,15 +162,10 @@ echo "🛑 Désactivation du service kernel-setup.service..."
 sudo systemctl disable kernel-setup.service
 sudo rm -f /etc/systemd/system/kernel-setup.service
 
-# 🚀 Activer armbian-firstboot pour la configuration initiale
-echo "🛠 Réactivation de armbian-firstboot pour la configuration initiale..."
-sudo touch /root/.not_logged_in_yet
-sudo systemctl enable armbian-firstboot.service
-
 # Création d'un fichier de contrôle
 touch /opt/kernel_installed
 
-# 🔄 Redémarrage du système
+# 🔄 Redémarrage du système pour finaliser l'installation
 echo "🔄 Redémarrage du système..."
 sudo reboot
 EOF
@@ -197,8 +192,44 @@ EOF
 
     systemctl enable kernel-setup.service
 
+    # 📜 Script de réactivation de `armbian-firstboot` après le dernier redémarrage
+    echo "Créer le script pour activer `armbian-firstboot` après reboot"
+    cat << 'EOF' > /opt/activate_armbian_firstboot.sh
+#!/bin/bash
+
+echo "🛠 Réactivation de armbian-firstboot pour la configuration initiale..."
+sudo touch /root/.not_logged_in_yet
+sudo systemctl enable armbian-firstboot.service
+
+# Suppression du script après exécution
+sudo rm -f /opt/activate_armbian_firstboot.sh
+EOF
+
+    chmod +x /opt/activate_armbian_firstboot.sh
+
+    # Service systemd pour exécuter la réactivation de `armbian-firstboot` après le dernier reboot
+    echo "Créer un service systemd pour activer `armbian-firstboot` après installation du kernel"
+    cat << 'EOF' > /etc/systemd/system/enable-armbian-firstboot.service
+[Unit]
+Description=Réactive la configuration initiale après l'installation du kernel
+Wants=network.target
+After=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/activate_armbian_firstboot.sh
+ExecStop=/bin/true
+RemainAfterExit=no
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    systemctl enable enable-armbian-firstboot.service
+
     echo "Fix sunxi ... [DONE]"
 }
+
 
 
 
