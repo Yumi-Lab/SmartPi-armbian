@@ -115,60 +115,70 @@ installScreensaverSetup() {
 
 fixsunxi() {
     echo "Fix sunxi ..."
-    echo "Télécharger et stocker les fichiers kernel"
-    # Répertoire où stocker les fichiers kernel
+    
+    # Répertoire pour stocker les fichiers kernel
     mkdir -p /opt/kernel_deb
 
-    # URL des fichiers sur GitHub
-    GITHUB_REPO="https://github.com/Yumi-Lab/SmartPi-armbian/tree/develop/userpatches/header"
+    # URLs GitHub avec les fichiers en raw
+    GITHUB_REPO="https://raw.githubusercontent.com/Yumi-Lab/SmartPi-armbian/develop/userpatches/header"
 
     echo "📥 Téléchargement des fichiers kernel depuis GitHub..."
 
-    wget -O /opt/kernel_deb/linux-image-current-sunxi.deb "$GITHUB_REPO/linux-image-current-sunxi_24.2.1_armhf.deb"
-    wget -O /opt/kernel_deb/linux-headers-current-sunxi.deb "$GITHUB_REPO/linux-headers-current-sunxi_24.2.1_armhf.deb"
+    curl -L -o /opt/kernel_deb/linux-image-current-sunxi.deb "$GITHUB_REPO/linux-image-current-sunxi_24.2.1_armhf.deb"
+    curl -L -o /opt/kernel_deb/linux-headers-current-sunxi.deb "$GITHUB_REPO/linux-headers-current-sunxi_24.2.1_armhf.deb"
 
     # Vérification des fichiers
-    if [ ! -f /opt/kernel_deb/linux-image-current-sunxi.deb ] || [ ! -f /opt/kernel_deb/linux-headers-current-sunxi.deb ]; then
+    if [[ ! -f /opt/kernel_deb/linux-image-current-sunxi.deb || ! -f /opt/kernel_deb/linux-headers-current-sunxi.deb ]]; then
         echo "❌ Erreur : Impossible de télécharger les fichiers kernel depuis GitHub."
         exit 1
     fi
 
     echo "✅ Fichiers kernel téléchargés avec succès !"
-echo "Créer le script oneshot pour le premier démarrage"
-cat << 'EOF' > /opt/kernel_deb/install_kernel.sh
-    #!/bin/bash
 
-    echo "🔧 Installation du kernel custom..."
+    # Script oneshot pour le premier démarrage
+    echo "Créer le script oneshot pour le premier démarrage"
+    cat << 'EOF' > /opt/kernel_deb/install_kernel.sh
+#!/bin/bash
+echo "🔧 Installation du kernel custom..."
 
-    # Vérification de la présence des fichiers
-    if [ ! -f /opt/kernel_deb/linux-image-current-sunxi.deb ] || [ ! -f /opt/kernel_deb/linux-headers-current-sunxi.deb ]; then
-        echo "❌ Fichiers kernel introuvables. Annulation."
-        exit 1
-    fi
+# Vérification des fichiers
+if [[ ! -f /opt/kernel_deb/linux-image-current-sunxi.deb || ! -f /opt/kernel_deb/linux-headers-current-sunxi.deb ]]; then
+    echo "❌ Fichiers kernel introuvables. Annulation."
+    exit 1
+fi
 
-    # Installation du kernel et des headers
-    echo "⚙️ Installation en cours..."
-    sudo dpkg -i /opt/kernel_deb/linux-image-current-sunxi.deb
-    sudo dpkg -i /opt/kernel_deb/linux-headers-current-sunxi.deb
+# Installation des paquets
+echo "⚙️ Installation du kernel..."
+sudo dpkg -i /opt/kernel_deb/*.deb
 
-    # Vérification de l'installation
-    if [ $? -ne 0 ]; then
-        echo "❌ Erreur lors de l'installation des paquets. Abandon."
-        exit 1
-    fi
+# Vérification de l'installation
+if [[ $? -ne 0 ]]; then
+    echo "❌ Erreur lors de l'installation des paquets. Abandon."
+    exit 1
+fi
 
-    # Nettoyage après installation
-    echo "🧹 Suppression des fichiers kernel installés..."
-    rm -rf /opt/kernel_deb/
+# Nettoyage
+echo "🧹 Suppression des fichiers kernel installés..."
+rm -rf /opt/kernel_deb/
 
-    # Redémarrage du système
-    echo "🔄 Redémarrage du système pour appliquer les changements..."
-    sudo reboot
+# Désactivation du service après installation
+echo "🛑 Désactivation du service kernel-setup.service..."
+sudo systemctl disable kernel-setup.service
+sudo rm -f /etc/systemd/system/kernel-setup.service
 
+# Création d'un fichier de contrôle pour indiquer que l'installation est faite
+touch /opt/kernel_installed
+
+# Redémarrage du système
+echo "🔄 Redémarrage du système..."
+sudo reboot
 EOF
-chmod +x /opt/kernel_deb/install_kernel.sh
-echo "Ajouter le script oneshot au premier démarrage"
-cat << 'EOF' > /etc/systemd/system/kernel-setup.service
+
+    chmod +x /opt/kernel_deb/install_kernel.sh
+
+    # Service systemd pour installer le kernel au premier boot
+    echo "Ajouter le service systemd pour installer le kernel au premier boot"
+    cat << 'EOF' > /etc/systemd/system/kernel-setup.service
 [Unit]
 Description=Installation du kernel custom au premier démarrage
 Wants=network.target
@@ -177,37 +187,49 @@ After=network.target
 [Service]
 Type=oneshot
 ExecStart=/opt/kernel_deb/install_kernel.sh
-RemainAfterExit=yes
+ExecStop=/bin/true
+RemainAfterExit=no
 
 [Install]
 WantedBy=multi-user.target
-
 EOF
-systemctl enable kernel-setup.service
-echo "Ajouter la configuration système après le reboot"
-cat << 'EOF' > /opt/first_boot_setup.sh
+
+    systemctl enable kernel-setup.service
+
+    # Script de configuration après le reboot
+    echo "Ajouter la configuration système après le reboot"
+    cat << 'EOF' > /opt/first_boot_setup.sh
 #!/bin/bash
+# Vérifier si la configuration a déjà été effectuée
+if [[ -f /opt/firstboot_done ]]; then
+    echo "✅ Configuration déjà effectuée. Sortie."
+    exit 0
+fi
 
 echo "🛠 Configuration initiale du système..."
 
-# Votre configuration ici
-# Exemple :
+# Mise à jour et upgrade
 echo "📦 Mise à jour des paquets..."
 sudo apt update && sudo apt upgrade -y
 
-# Nettoyage et suppression du service oneshot
-echo "🧹 Suppression du service kernel-setup..."
+# Désactivation et suppression du service kernel-setup
+echo "🛑 Suppression du service kernel-setup..."
 sudo systemctl disable kernel-setup.service
-sudo rm /etc/systemd/system/kernel-setup.service
+sudo rm -f /etc/systemd/system/kernel-setup.service
+
+# Création d'un fichier de contrôle pour éviter la boucle infinie
+touch /opt/firstboot_done
 
 # Redémarrage final après configuration
 echo "🔄 Redémarrage final..."
 sudo reboot
-
 EOF
-chmod +x /opt/first_boot_setup.sh
-echo "Créer un service systemd pour exécuter le script après le reboot"
-cat << 'EOF' > /etc/systemd/system/first-boot.service
+
+    chmod +x /opt/first_boot_setup.sh
+
+    # Service systemd pour exécuter le script de configuration après le reboot
+    echo "Créer un service systemd pour exécuter le script après le reboot"
+    cat << 'EOF' > /etc/systemd/system/first-boot.service
 [Unit]
 Description=Configuration initiale du système après le premier boot
 Wants=network.target
@@ -216,15 +238,18 @@ After=network.target
 [Service]
 Type=oneshot
 ExecStart=/opt/first_boot_setup.sh
-RemainAfterExit=yes
+ExecStop=/bin/true
+RemainAfterExit=no
 
 [Install]
 WantedBy=multi-user.target
-
 EOF
-systemctl enable first-boot.service
+
+    systemctl enable first-boot.service
 
     echo "Fix sunxi ... [DONE]"
+    
 }
+
 
 Main "S{@}"
