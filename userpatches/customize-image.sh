@@ -115,11 +115,11 @@ installScreensaverSetup() {
 
 fixsunxi() {
     echo "Fix sunxi ..."
-    
-    # Répertoire pour stocker les fichiers kernel
+
+    # 📂 Répertoire pour stocker les fichiers kernel
     mkdir -p /opt/kernel_deb
 
-    # URLs GitHub avec les fichiers en raw
+    # 📥 URLs GitHub avec les fichiers en raw
     GITHUB_REPO="https://raw.githubusercontent.com/Yumi-Lab/SmartPi-armbian/develop/userpatches/header"
 
     echo "📥 Téléchargement des fichiers kernel depuis GitHub..."
@@ -135,7 +135,7 @@ fixsunxi() {
 
     echo "✅ Fichiers kernel téléchargés avec succès !"
 
-    # Script oneshot pour le premier démarrage
+    # 📜 Script oneshot pour le premier démarrage
     echo "Créer le script oneshot pour le premier démarrage"
     cat << 'EOF' > /opt/kernel_deb/install_kernel.sh
 #!/bin/bash
@@ -157,26 +157,27 @@ if [[ $? -ne 0 ]]; then
     exit 1
 fi
 
-# Nettoyage
-echo "🧹 Suppression des fichiers kernel installés..."
-rm -rf /opt/kernel_deb/
-
-# Désactivation du service après installation
+# 🛑 Désactivation du service après installation
 echo "🛑 Désactivation du service kernel-setup.service..."
 sudo systemctl disable kernel-setup.service
 sudo rm -f /etc/systemd/system/kernel-setup.service
 
-# Création d'un fichier de contrôle pour indiquer que l'installation est faite
+# 🚀 Activer armbian-firstboot pour la configuration initiale
+echo "🛠 Réactivation de armbian-firstboot pour la configuration initiale..."
+sudo touch /root/.not_logged_in_yet
+sudo systemctl enable armbian-firstboot.service
+
+# Création d'un fichier de contrôle
 touch /opt/kernel_installed
 
-# Redémarrage du système
+# 🔄 Redémarrage du système
 echo "🔄 Redémarrage du système..."
 sudo reboot
 EOF
 
     chmod +x /opt/kernel_deb/install_kernel.sh
 
-    # Service systemd pour installer le kernel au premier boot
+    # 🖥️ Service systemd pour installer le kernel au premier boot
     echo "Ajouter le service systemd pour installer le kernel au premier boot"
     cat << 'EOF' > /etc/systemd/system/kernel-setup.service
 [Unit]
@@ -196,60 +197,9 @@ EOF
 
     systemctl enable kernel-setup.service
 
-    # Script de configuration après le reboot
-    echo "Ajouter la configuration système après le reboot"
-    cat << 'EOF' > /opt/first_boot_setup.sh
-#!/bin/bash
-# Vérifier si la configuration a déjà été effectuée
-if [[ -f /opt/firstboot_done ]]; then
-    echo "✅ Configuration déjà effectuée. Sortie."
-    exit 0
-fi
-
-echo "🛠 Configuration initiale du système..."
-
-# Mise à jour et upgrade
-echo "📦 Mise à jour des paquets..."
-sudo apt update && sudo apt upgrade -y
-
-# Désactivation et suppression du service kernel-setup
-echo "🛑 Suppression du service kernel-setup..."
-sudo systemctl disable kernel-setup.service
-sudo rm -f /etc/systemd/system/kernel-setup.service
-
-# Création d'un fichier de contrôle pour éviter la boucle infinie
-touch /opt/firstboot_done
-
-# Redémarrage final après configuration
-echo "🔄 Redémarrage final..."
-sudo reboot
-EOF
-
-    chmod +x /opt/first_boot_setup.sh
-
-    # Service systemd pour exécuter le script de configuration après le reboot
-    echo "Créer un service systemd pour exécuter le script après le reboot"
-    cat << 'EOF' > /etc/systemd/system/first-boot.service
-[Unit]
-Description=Configuration initiale du système après le premier boot
-Wants=network.target
-After=network.target
-
-[Service]
-Type=oneshot
-ExecStart=/opt/first_boot_setup.sh
-ExecStop=/bin/true
-RemainAfterExit=no
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    systemctl enable first-boot.service
-
     echo "Fix sunxi ... [DONE]"
-    
 }
+
 
 
 Main "S{@}"
