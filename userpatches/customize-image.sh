@@ -164,7 +164,7 @@ else
     echo "⚠️ Aucune clé Wi-Fi détectée. Vous devrez configurer le Wi-Fi manuellement."
 fi
 
-# 🛠 Activation de `armbian-firstboot` **après** le reboot
+# 🛠 Activer `armbian-firstboot` pour qu'il démarre après le reboot
 echo "🛠 Activation de armbian-firstboot après reboot..."
 sudo touch /root/.not_logged_in_yet
 sudo systemctl enable armbian-firstboot.service
@@ -203,6 +203,7 @@ EOF
 
     echo "Fix sunxi ... [DONE]"
 }
+
 
 
 
