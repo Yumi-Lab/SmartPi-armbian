@@ -192,7 +192,64 @@ EOF
 
     systemctl enable kernel-setup.service
 
-    # 📜 Script de réactivation de `armbian-firstboot` après le dernier redémarrage
+    # 📜 Script pour s'assurer que le Wi-Fi est actif avant `armbian-firstboot`
+    echo "Créer le script pour s'assurer que le Wi-Fi fonctionne avant la configuration initiale"
+    cat << 'EOF' > /opt/enable_wifi_before_firstboot.sh
+#!/bin/bash
+
+echo "📶 Activation du Wi-Fi avant la configuration initiale Armbian..."
+
+# Activer NetworkManager (si présent)
+if command -v nmcli &> /dev/null; then
+    echo "✅ Activation de NetworkManager..."
+    sudo systemctl enable NetworkManager.service
+    sudo systemctl start NetworkManager.service
+fi
+
+# Activer wpa_supplicant pour le Wi-Fi
+echo "✅ Activation de wpa_supplicant..."
+sudo systemctl enable wpa_supplicant
+sudo systemctl start wpa_supplicant
+
+# Activer le DHCP client pour obtenir une adresse IP
+echo "✅ Obtention d'une adresse IP via DHCP..."
+sudo dhclient -v wlan0 || sudo systemctl restart dhclient
+
+# Vérifier si on est bien connecté à Internet avant de lancer la configuration Armbian
+echo "🔍 Vérification de la connexion réseau..."
+for i in {1..10}; do
+    if ping -c 1 8.8.8.8 &> /dev/null; then
+        echo "✅ Wi-Fi actif et connecté à Internet."
+        break
+    fi
+    echo "❌ Pas de connexion, tentative $i/10..."
+    sleep 3
+done
+EOF
+
+    chmod +x /opt/enable_wifi_before_firstboot.sh
+
+    # Service systemd pour s'assurer que le Wi-Fi fonctionne avant `armbian-firstboot`
+    echo "Créer un service systemd pour activer le Wi-Fi avant armbian-firstboot"
+    cat << 'EOF' > /etc/systemd/system/enable-wifi-before-firstboot.service
+[Unit]
+Description=Active le Wi-Fi avant la configuration initiale d'Armbian
+Wants=network.target
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/enable_wifi_before_firstboot.sh
+ExecStop=/bin/true
+RemainAfterExit=no
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    systemctl enable enable-wifi-before-firstboot.service
+
+    # 📜 Script pour activer `armbian-firstboot`
     echo "Créer le script pour activer `armbian-firstboot` après reboot"
     cat << 'EOF' > /opt/activate_armbian_firstboot.sh
 #!/bin/bash
@@ -207,13 +264,13 @@ EOF
 
     chmod +x /opt/activate_armbian_firstboot.sh
 
-    # Service systemd pour exécuter la réactivation de `armbian-firstboot` après le dernier reboot
+    # Service systemd pour exécuter `armbian-firstboot` après le reboot final
     echo "Créer un service systemd pour activer `armbian-firstboot` après installation du kernel"
     cat << 'EOF' > /etc/systemd/system/enable-armbian-firstboot.service
 [Unit]
 Description=Réactive la configuration initiale après l'installation du kernel
-Wants=network.target
-After=multi-user.target
+Wants=enable-wifi-before-firstboot.service
+After=enable-wifi-before-firstboot.service
 
 [Service]
 Type=oneshot
@@ -229,6 +286,7 @@ EOF
 
     echo "Fix sunxi ... [DONE]"
 }
+
 
 
 
