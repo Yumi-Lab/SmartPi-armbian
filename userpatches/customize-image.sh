@@ -134,7 +134,7 @@ fixsunxi() {
 
     echo "✅ Fichiers kernel téléchargés avec succès !"
 
-    # 📜 Script pour installer le kernel et forcer un **reboot après le premier prompt de connexion**
+    # 📜 Script pour installer le kernel et s'assurer que le Wi-Fi est détecté avant la configuration utilisateur
     echo "Créer le script pour installer le kernel et forcer un reboot"
     cat << 'EOF' > /opt/kernel_deb/install_kernel.sh
 #!/bin/bash
@@ -156,10 +156,23 @@ if [[ $? -ne 0 ]]; then
     exit 1
 fi
 
-# Activer `armbian-firstboot` pour le redémarrage suivant
+# Activer `armbian-firstboot` pour la configuration utilisateur après le reboot
 echo "🛠 Activation de armbian-firstboot..."
 sudo touch /root/.not_logged_in_yet
 sudo systemctl enable armbian-firstboot.service
+
+# 🛑 Désactiver le service une fois terminé
+echo "🛑 Désactivation du service kernel-setup.service..."
+sudo systemctl disable kernel-setup.service
+sudo rm -f /etc/systemd/system/kernel-setup.service
+
+# Vérifier si une clé Wi-Fi USB est branchée
+if lsusb | grep -iq "wireless"; then
+    echo "✅ Clé Wi-Fi détectée, activation immédiate..."
+    sudo systemctl restart NetworkManager.service
+else
+    echo "⚠️ Aucune clé Wi-Fi détectée. Vous devrez configurer le Wi-Fi manuellement."
+fi
 
 # 🔄 Redémarrage immédiat après installation pour charger le nouveau kernel
 echo "🔄 Redémarrage après installation du kernel..."
@@ -189,6 +202,7 @@ EOF
 
     echo "Fix sunxi ... [DONE]"
 }
+
 
 
 
