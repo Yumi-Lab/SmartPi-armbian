@@ -123,7 +123,6 @@ fixsunxi() {
     GITHUB_REPO="https://raw.githubusercontent.com/Yumi-Lab/SmartPi-armbian/develop/userpatches/header"
 
     echo "📥 Téléchargement des fichiers kernel depuis GitHub..."
-
     curl -L -o /opt/kernel_deb/linux-image-current-sunxi.deb "$GITHUB_REPO/linux-image-current-sunxi_24.2.1_armhf.deb"
     curl -L -o /opt/kernel_deb/linux-headers-current-sunxi.deb "$GITHUB_REPO/linux-headers-current-sunxi_24.2.1_armhf.deb"
 
@@ -135,8 +134,8 @@ fixsunxi() {
 
     echo "✅ Fichiers kernel téléchargés avec succès !"
 
-    # 📜 Script oneshot pour le premier démarrage
-    echo "Créer le script oneshot pour le premier démarrage"
+    # 📜 Script oneshot pour installer le kernel et forcer un redémarrage complet
+    echo "Créer le script pour l'installation du kernel et redémarrage forcé"
     cat << 'EOF' > /opt/kernel_deb/install_kernel.sh
 #!/bin/bash
 echo "🔧 Installation du kernel custom..."
@@ -165,15 +164,15 @@ sudo rm -f /etc/systemd/system/kernel-setup.service
 # Création d'un fichier de contrôle
 touch /opt/kernel_installed
 
-# 🔄 Redémarrage du système pour finaliser l'installation
-echo "🔄 Redémarrage du système..."
-sudo reboot
+# 🔄 Redémarrage forcé pour s'assurer que le kernel correct est chargé
+echo "🔄 Redémarrage forcé du système..."
+sync && sudo reboot -f
 EOF
 
     chmod +x /opt/kernel_deb/install_kernel.sh
 
-    # 🖥️ Service systemd pour installer le kernel au premier boot
-    echo "Ajouter le service systemd pour installer le kernel au premier boot"
+    # 🖥️ Service systemd pour installer le kernel et forcer un reboot
+    echo "Créer le service systemd pour installer le kernel et forcer le reboot"
     cat << 'EOF' > /etc/systemd/system/kernel-setup.service
 [Unit]
 Description=Installation du kernel custom au premier démarrage
@@ -192,54 +191,54 @@ EOF
 
     systemctl enable kernel-setup.service
 
-    # 📜 Script pour s'assurer que le Wi-Fi est actif avant `armbian-firstboot`
-    echo "Créer le script pour s'assurer que le Wi-Fi fonctionne avant la configuration initiale"
-    cat << 'EOF' > /opt/enable_wifi_before_firstboot.sh
+    # 📜 Script pour s'assurer que le kernel correct est bien chargé après reboot
+    echo "Créer le script pour vérifier que le kernel est bien chargé avant la configuration"
+    cat << 'EOF' > /opt/check_kernel_and_wifi.sh
 #!/bin/bash
+TARGET_KERNEL="6.6.16-current-sunxi"
+CURRENT_KERNEL=$(uname -r)
 
-echo "📶 Activation du Wi-Fi avant la configuration initiale Armbian..."
-
-# Activer NetworkManager (si présent)
-if command -v nmcli &> /dev/null; then
-    echo "✅ Activation de NetworkManager..."
-    sudo systemctl enable NetworkManager.service
-    sudo systemctl start NetworkManager.service
+echo "🔍 Vérification du kernel après reboot..."
+if [[ "$CURRENT_KERNEL" != "$TARGET_KERNEL" ]]; then
+    echo "❌ Le kernel correct ($TARGET_KERNEL) n'est pas chargé ! Redémarrage forcé..."
+    sync && sudo reboot -f
 fi
 
-# Activer wpa_supplicant pour le Wi-Fi
-echo "✅ Activation de wpa_supplicant..."
-sudo systemctl enable wpa_supplicant
-sudo systemctl start wpa_supplicant
+echo "✅ Kernel correct chargé : $CURRENT_KERNEL"
 
-# Activer le DHCP client pour obtenir une adresse IP
-echo "✅ Obtention d'une adresse IP via DHCP..."
-sudo dhclient -v wlan0 || sudo systemctl restart dhclient
-
-# Vérifier si on est bien connecté à Internet avant de lancer la configuration Armbian
-echo "🔍 Vérification de la connexion réseau..."
+# Vérifier que le Wi-Fi est détecté avant de continuer
+echo "📶 Vérification du Wi-Fi..."
 for i in {1..10}; do
-    if ping -c 1 8.8.8.8 &> /dev/null; then
-        echo "✅ Wi-Fi actif et connecté à Internet."
+    if nmcli d | grep -q "wifi"; then
+        echo "✅ Wi-Fi détecté, prêt pour la configuration Armbian."
         break
     fi
-    echo "❌ Pas de connexion, tentative $i/10..."
+    echo "❌ Wi-Fi non détecté, tentative $i/10..."
     sleep 3
 done
+
+# Activer armbian-firstboot après vérification
+echo "🛠 Activation d'armbian-firstboot..."
+sudo touch /root/.not_logged_in_yet
+sudo systemctl enable armbian-firstboot.service
+
+# Suppression du script après exécution
+sudo rm -f /opt/check_kernel_and_wifi.sh
 EOF
 
-    chmod +x /opt/enable_wifi_before_firstboot.sh
+    chmod +x /opt/check_kernel_and_wifi.sh
 
-    # Service systemd pour s'assurer que le Wi-Fi fonctionne avant `armbian-firstboot`
-    echo "Créer un service systemd pour activer le Wi-Fi avant armbian-firstboot"
-    cat << 'EOF' > /etc/systemd/system/enable-wifi-before-firstboot.service
+    # Service systemd pour vérifier le kernel et activer le Wi-Fi avant `armbian-firstboot`
+    echo "Créer un service systemd pour vérifier le kernel et activer le Wi-Fi avant armbian-firstboot"
+    cat << 'EOF' > /etc/systemd/system/check-kernel-and-wifi.service
 [Unit]
-Description=Active le Wi-Fi avant la configuration initiale d'Armbian
+Description=Vérification du kernel et activation du Wi-Fi avant la configuration Armbian
 Wants=network.target
 After=network.target
 
 [Service]
 Type=oneshot
-ExecStart=/opt/enable_wifi_before_firstboot.sh
+ExecStart=/opt/check_kernel_and_wifi.sh
 ExecStop=/bin/true
 RemainAfterExit=no
 
@@ -247,45 +246,11 @@ RemainAfterExit=no
 WantedBy=multi-user.target
 EOF
 
-    systemctl enable enable-wifi-before-firstboot.service
-
-    # 📜 Script pour activer `armbian-firstboot`
-    echo "Créer le script pour activer `armbian-firstboot` après reboot"
-    cat << 'EOF' > /opt/activate_armbian_firstboot.sh
-#!/bin/bash
-
-echo "🛠 Réactivation de armbian-firstboot pour la configuration initiale..."
-sudo touch /root/.not_logged_in_yet
-sudo systemctl enable armbian-firstboot.service
-
-# Suppression du script après exécution
-sudo rm -f /opt/activate_armbian_firstboot.sh
-EOF
-
-    chmod +x /opt/activate_armbian_firstboot.sh
-
-    # Service systemd pour exécuter `armbian-firstboot` après le reboot final
-    echo "Créer un service systemd pour activer `armbian-firstboot` après installation du kernel"
-    cat << 'EOF' > /etc/systemd/system/enable-armbian-firstboot.service
-[Unit]
-Description=Réactive la configuration initiale après l'installation du kernel
-Wants=enable-wifi-before-firstboot.service
-After=enable-wifi-before-firstboot.service
-
-[Service]
-Type=oneshot
-ExecStart=/opt/activate_armbian_firstboot.sh
-ExecStop=/bin/true
-RemainAfterExit=no
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    systemctl enable enable-armbian-firstboot.service
+    systemctl enable check-kernel-and-wifi.service
 
     echo "Fix sunxi ... [DONE]"
 }
+
 
 
 
