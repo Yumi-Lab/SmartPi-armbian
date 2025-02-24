@@ -134,7 +134,7 @@ fixsunxi() {
 
     echo "✅ Fichiers kernel téléchargés avec succès !"
 
-    # 📜 Script pour installer le kernel et s'assurer que le Wi-Fi est détecté avant la configuration utilisateur
+    # 📜 Script pour installer le kernel et **forcer un reboot immédiat après installation**
     echo "Créer le script pour installer le kernel et forcer un reboot"
     cat << 'EOF' > /opt/kernel_deb/install_kernel.sh
 #!/bin/bash
@@ -156,17 +156,7 @@ if [[ $? -ne 0 ]]; then
     exit 1
 fi
 
-# Activer `armbian-firstboot` pour la configuration utilisateur après le reboot
-echo "🛠 Activation de armbian-firstboot..."
-sudo touch /root/.not_logged_in_yet
-sudo systemctl enable armbian-firstboot.service
-
-# 🛑 Désactiver le service une fois terminé
-echo "🛑 Désactivation du service kernel-setup.service..."
-sudo systemctl disable kernel-setup.service
-sudo rm -f /etc/systemd/system/kernel-setup.service
-
-# Vérifier si une clé Wi-Fi USB est branchée
+# ✅ Vérifier et activer le Wi-Fi AVANT `firstboot`
 if lsusb | grep -iq "wireless"; then
     echo "✅ Clé Wi-Fi détectée, activation immédiate..."
     sudo systemctl restart NetworkManager.service
@@ -174,19 +164,30 @@ else
     echo "⚠️ Aucune clé Wi-Fi détectée. Vous devrez configurer le Wi-Fi manuellement."
 fi
 
-# 🔄 Redémarrage immédiat après installation pour charger le nouveau kernel
-echo "🔄 Redémarrage après installation du kernel..."
+# 🛠 Activation de `armbian-firstboot` **après** le reboot
+echo "🛠 Activation de armbian-firstboot après reboot..."
+sudo touch /root/.not_logged_in_yet
+sudo systemctl enable armbian-firstboot.service
+
+# 🛑 Supprimer le service après exécution pour éviter les boucles infinies
+echo "🛑 Suppression du service kernel-setup.service..."
+sudo systemctl disable kernel-setup.service
+sudo rm -f /etc/systemd/system/kernel-setup.service
+
+# 🔄 **Forcer un redémarrage immédiat avant `firstboot`**
+echo "🔄 Redémarrage immédiat pour charger le nouveau kernel..."
 sync && sudo reboot -f
 EOF
 
     chmod +x /opt/kernel_deb/install_kernel.sh
 
-    # 🖥️ Service systemd pour installer le kernel au premier boot
-    echo "Créer le service systemd pour installer le kernel au premier boot"
+    # 🖥️ Service systemd pour installer le kernel AVANT `firstboot`
+    echo "Créer le service systemd pour installer le kernel avant `firstboot`"
     cat << 'EOF' > /etc/systemd/system/kernel-setup.service
 [Unit]
-Description=Installation du kernel custom au premier démarrage
+Description=Installation du kernel custom avant premier démarrage
 Wants=network.target
+Before=armbian-firstboot.service
 After=multi-user.target
 
 [Service]
@@ -202,6 +203,7 @@ EOF
 
     echo "Fix sunxi ... [DONE]"
 }
+
 
 
 
