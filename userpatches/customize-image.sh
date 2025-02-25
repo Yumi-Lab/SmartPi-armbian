@@ -116,22 +116,22 @@ installScreensaverSetup() {
 fixsunxi() {
     echo "Fix sunxi ..."
 
-    # 📂 Créer le répertoire pour stocker les fichiers kernel et armbian-config
+    # 📂 Créer les répertoires pour stocker les fichiers kernel et armbian-config
     mkdir -p /opt/kernel_deb
     mkdir -p /opt/armbian_config
 
-    # 📥 Télécharger les fichiers kernel depuis GitHub
+    # 📥 Télécharger les fichiers kernel localement AVANT la construction
     GITHUB_REPO="https://raw.githubusercontent.com/Yumi-Lab/SmartPi-armbian/develop/userpatches/header"
-    echo "📥 Téléchargement des fichiers kernel..."
-    
+    echo "📥 Téléchargement des fichiers kernel en local pour l'inclure dans l'image..."
+
     curl -L -o /opt/kernel_deb/linux-image-current-sunxi.deb "$GITHUB_REPO/linux-image-current-sunxi_24.2.1_armhf.deb"
     curl -L -o /opt/kernel_deb/linux-headers-current-sunxi.deb "$GITHUB_REPO/linux-headers-current-sunxi_24.2.1_armhf.deb"
 
-    # 📥 Télécharger armbian-config 24.5.5
-    echo "📥 Téléchargement de `armbian-config_24.5.5`..."
+    # 📥 Télécharger `armbian-config` 24.5.5 en local
+    echo "📥 Téléchargement de `armbian-config_24.5.5` pour stockage local..."
     wget -O /opt/armbian_config/armbian-config_24.5.5_all.deb "http://imola.armbian.com/apt/pool/main/a/armbian-config/armbian-config_24.5.5_all__1-SA5703-B9a9b-R448a.deb"
 
-    # Vérifier si les fichiers ont bien été téléchargés
+    # Vérifier si les fichiers sont bien téléchargés avant d'inclure dans l'image
     if [[ ! -f /opt/kernel_deb/linux-image-current-sunxi.deb || ! -f /opt/kernel_deb/linux-headers-current-sunxi.deb ]]; then
         echo "❌ Erreur : Impossible de télécharger les fichiers kernel."
         exit 1
@@ -142,101 +142,83 @@ fixsunxi() {
         exit 1
     fi
 
-    echo "✅ Tous les fichiers nécessaires ont été téléchargés avec succès !"
+    echo "✅ Tous les fichiers nécessaires sont téléchargés et inclus dans l'image !"
 
-    # 📜 Script pour installer le kernel et `armbian-config`, puis **forcer un reboot immédiat après installation**
-    echo "Créer le script pour installer le kernel, `armbian-config` et forcer un reboot"
-    cat << 'EOF' > /opt/kernel_deb/install_kernel.sh
+    # 📜 Modifier automatiquement `armbian-check-first-login.sh`
+    echo "✍️ Modification de `armbian-check-first-login.sh` pour installer le kernel et le Wi-Fi AVANT `firstlogin`"
+
+    cat << 'EOF' > /usr/lib/armbian/armbian-check-first-login.sh
 #!/bin/bash
-echo "🔧 Installation du kernel custom et `armbian-config`..."
+echo "🚀 Vérification du premier login et installation du kernel..."
 
-# ❌ Supprimer le fichier `.not_logged_in_yet` pour éviter le lancement prématuré de `firstboot`
-if [[ -f /root/.not_logged_in_yet ]]; then
-    echo "🗑 Suppression de /root/.not_logged_in_yet avant installation..."
-    sudo rm -f /root/.not_logged_in_yet
+# ✅ Vérifier si le kernel est déjà installé
+if [[ ! -f /opt/kernel_installed ]]; then
+    echo "🔧 Installation du kernel custom et `armbian-config` avant `firstlogin`..."
+
+    # ❌ Supprimer temporairement `/root/.not_logged_in_yet` pour empêcher `firstboot` prématuré
+    if [[ -f /root/.not_logged_in_yet ]]; then
+        echo "🗑 Suppression temporaire de /root/.not_logged_in_yet..."
+        sudo rm -f /root/.not_logged_in_yet
+    fi
+
+    # 📌 Installation du kernel
+    if [[ -f /opt/kernel_deb/linux-image-current-sunxi.deb && -f /opt/kernel_deb/linux-headers-current-sunxi.deb ]]; then
+        echo "⚙️ Installation du kernel 6.6.16..."
+        sudo dpkg -i /opt/kernel_deb/*.deb
+        if [[ $? -eq 0 ]]; then
+            echo "✅ Kernel installé avec succès !"
+        else
+            echo "❌ Erreur d'installation du kernel."
+        fi
+    else
+        echo "⚠️ Fichiers kernel manquants, installation ignorée."
+    fi
+
+    # 🔧 Installation de `armbian-config`
+    if [[ -f /opt/armbian_config/armbian-config_24.5.5_all.deb ]]; then
+        echo "⚙️ Installation d'`armbian-config` 24.5.5..."
+        sudo dpkg -i /opt/armbian_config/armbian-config_24.5.5_all.deb
+        if [[ $? -eq 0 ]]; then
+            echo "✅ `armbian-config` installé et verrouillé."
+            sudo apt-mark hold armbian-config
+        else
+            echo "❌ Erreur d'installation d'`armbian-config`."
+        fi
+    else
+        echo "⚠️ Fichier `armbian-config` manquant, installation ignorée."
+    fi
+
+    # ✅ Vérifier et activer le Wi-Fi AVANT `firstboot`
+    if lsusb | grep -iq "wireless"; then
+        echo "✅ Clé Wi-Fi détectée, activation immédiate..."
+        sudo systemctl restart NetworkManager.service
+    else
+        echo "⚠️ Aucune clé Wi-Fi détectée, configuration manuelle requise."
+    fi
+
+    # ✅ Marquer l’installation comme terminée pour éviter les exécutions répétées
+    touch /opt/kernel_installed
+
+    # 🔄 **Forcer un redémarrage immédiat AVANT `firstboot`**
+    echo "🔄 Redémarrage immédiat pour charger le bon kernel..."
+    sync && sudo reboot -f
+    exit 0  # Empêche `armbian-firstlogin` de s'exécuter immédiatement après le premier boot
 fi
 
-# Vérifier si les fichiers sont présents
-if [[ ! -f /opt/kernel_deb/linux-image-current-sunxi.deb || ! -f /opt/kernel_deb/linux-headers-current-sunxi.deb ]]; then
-    echo "❌ Fichiers kernel introuvables. Annulation."
-    exit 1
+# ✅ Si le kernel est déjà installé, on lance `armbian-firstlogin`
+if [ -w /root/ -a -f /root/.not_logged_in_yet ]; then
+    bash /usr/lib/armbian/armbian-firstlogin
 fi
-
-if [[ ! -f /opt/armbian_config/armbian-config_24.5.5_all.deb ]]; then
-    echo "❌ Fichier `armbian-config` introuvable. Annulation."
-    exit 1
-fi
-
-# 🏗 Installer le kernel
-echo "⚙️ Installation du kernel..."
-sudo dpkg -i /opt/kernel_deb/*.deb
-
-# Vérifier l'installation du kernel
-if [[ $? -ne 0 ]]; then
-    echo "❌ Erreur lors de l'installation du kernel."
-    exit 1
-fi
-
-# 🔧 Installer `armbian-config`
-echo "⚙️ Installation d'`armbian-config` 24.5.5..."
-sudo dpkg -i /opt/armbian_config/armbian-config_24.5.5_all.deb
-
-# Vérifier l'installation de `armbian-config`
-if [[ $? -ne 0 ]]; then
-    echo "❌ Erreur lors de l'installation d'`armbian-config`."
-    exit 1
-fi
-
-# 📌 Bloquer la mise à jour d'`armbian-config`
-sudo apt-mark hold armbian-config
-
-# ✅ Vérifier et activer le Wi-Fi AVANT `firstboot`
-if lsusb | grep -iq "wireless"; then
-    echo "✅ Clé Wi-Fi détectée, activation immédiate..."
-    sudo systemctl restart NetworkManager.service
-else
-    echo "⚠️ Aucune clé Wi-Fi détectée. Vous devrez configurer le Wi-Fi manuellement."
-fi
-
-# 🛠 **Recréer** `/root/.not_logged_in_yet` pour forcer `armbian-firstboot`
-echo "🛠 Activation de armbian-firstboot après reboot..."
-sudo touch /root/.not_logged_in_yet
-sudo systemctl enable armbian-firstboot.service
-
-# 🛑 Supprimer le service après exécution pour éviter les boucles infinies
-echo "🛑 Suppression du service kernel-setup.service..."
-sudo systemctl disable kernel-setup.service
-sudo rm -f /etc/systemd/system/kernel-setup.service
-
-# 🔄 **Forcer un redémarrage immédiat avant `firstboot`**
-echo "🔄 Redémarrage immédiat pour charger le nouveau kernel et `armbian-config`..."
-sync && sudo reboot -f
 EOF
 
-    chmod +x /opt/kernel_deb/install_kernel.sh
+    # Donner les permissions d'exécution
+    chmod +x /usr/lib/armbian/armbian-check-first-login.sh
 
-    # 🖥️ Service systemd pour installer le kernel et `armbian-config` AVANT `firstboot`
-    echo "Créer le service systemd pour installer le kernel et `armbian-config` avant `firstboot`"
-    cat << 'EOF' > /etc/systemd/system/kernel-setup.service
-[Unit]
-Description=Installation du kernel custom et `armbian-config` avant premier démarrage
-Wants=network.target
-Before=armbian-firstboot.service
-After=multi-user.target
-
-[Service]
-Type=oneshot
-ExecStart=/opt/kernel_deb/install_kernel.sh
-RemainAfterExit=no
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    systemctl enable kernel-setup.service
+    echo "✅ `armbian-check-first-login.sh` a été modifié avec succès !"
 
     echo "Fix sunxi ... [DONE]"
 }
+
 
 
 
