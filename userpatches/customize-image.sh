@@ -20,8 +20,6 @@ LINUXFAMILY=$2
 BOARD=$3
 BUILD_DESKTOP=$4
 
-
-
 Main() {
     case "${BOARD}" in
         smartpad)
@@ -37,14 +35,14 @@ Main() {
             fi
             if [[ "${RELEASE}" = "bookworm" ]]; then
                 #fixsunxi
+                echo "release bookworm"
             fi
             ;;
     esac
 }
 
 rotateConsole() {
-    local bootcfg
-    bootcfg="/boot/armbianEnv.txt"
+    local bootcfg="/boot/armbianEnv.txt"
     echo "Rotate tty console by default ..."
     echo "extraargs=fbcon=rotate:2" >> "${bootcfg}"
     echo "Current configuration (${bootcfg}):"
@@ -53,8 +51,8 @@ rotateConsole() {
 }
 
 rotateScreen() {
-    src="/tmp/overlay/02-smartpad-rotate-screen.conf"
-    dest="/etc/X11/xorg.conf.d/"
+    local src="/tmp/overlay/02-smartpad-rotate-screen.conf"
+    local dest="/etc/X11/xorg.conf.d/"
     echo "Install rotated screen configuration ..."
     cp -v "${src}" "${dest}"
     echo "DEBUG:"
@@ -63,8 +61,8 @@ rotateScreen() {
 }
 
 rotateTouch() {
-    src="/tmp/overlay/03-smartpad-rotate-touch.conf"
-    dest="/etc/X11/xorg.conf.d/"
+    local src="/tmp/overlay/03-smartpad-rotate-touch.conf"
+    local dest="/etc/X11/xorg.conf.d/"
     echo "Install rotated touch configuration ..."
     cp -v "${src}" "${dest}"
     echo "DEBUG:"
@@ -73,18 +71,17 @@ rotateTouch() {
 }
 
 disableDPMS() {
-    src="/tmp/overlay/04-smartpad-disable-dpms.conf"
-    dest="/etc/X11/xorg.conf.d/"
-    echo "Install rotated touch configuration ..."
+    local src="/tmp/overlay/04-smartpad-disable-dpms.conf"
+    local dest="/etc/X11/xorg.conf.d/"
+    echo "Disable DPMS power management ..."
     cp -v "${src}" "${dest}"
     echo "DEBUG:"
     ls -l "${dest}"
-    echo "Install rotated touch configuration ... [DONE]"
+    echo "Disable DPMS power management ... [DONE]"
 }
 
 patchLightdm() {
-    local conf
-    conf="/etc/lightdm/lightdm.conf.d/12-onboard.conf"
+    local conf="/etc/lightdm/lightdm.conf.d/12-onboard.conf"
     echo "Enable OnScreen Keyboard in Lightdm ..."
     echo "onscreen-keyboard = true" | tee "${conf}"
     echo "Enable OnScreen Keyboard in Lightdm ... [DONE]"
@@ -98,31 +95,28 @@ copyOnboardConf() {
 }
 
 patchOnboardAutostart() {
-    local conf
-    conf="/etc/xdg/autostart/onboard-autostart.desktop"
+    local conf="/etc/xdg/autostart/onboard-autostart.desktop"
     echo "Patch Onboard Autostart file ..."
     sed -i '/OnlyShowIn/s/^/# /' "${conf}"
     echo "Patch Onboard Autostart file ... [DONE]"
 }
 
 installScreensaverSetup() {
-    src="/tmp/overlay/skel-xscreensaver"
-    dest="/etc/skel/.xscreensaver"
-    echo "Install rotated touch configuration ..."
+    local src="/tmp/overlay/skel-xscreensaver"
+    local dest="/etc/skel/.xscreensaver"
+    echo "Install screensaver configuration ..."
     \cp -fv "${src}" "${dest}"
     echo "DEBUG:"
-    ls -al "$(dirname ${dest})"
-    echo "Install rotated touch configuration ... [DONE]"
+    ls -al "$(dirname "${dest}")"
+    echo "Install screensaver configuration ... [DONE]"
 }
 
 fixsunxi() {
     echo "Fix sunxi ..."
 
-    # 📂 Créer les répertoires pour stocker les fichiers kernel et armbian-config
     mkdir -p /opt/kernel_deb
     mkdir -p /opt/armbian_config
 
-    # 📥 Télécharger les fichiers kernel et armbian-config AVANT le build
     GITHUB_REPO="https://raw.githubusercontent.com/Yumi-Lab/SmartPi-armbian/develop/userpatches/header"
 
     echo "📥 Téléchargement des fichiers kernel..."
@@ -132,7 +126,6 @@ fixsunxi() {
     echo "📥 Téléchargement de `armbian-config` 24.5.5..."
     wget -O /opt/armbian_config/armbian-config_24.5.5_all.deb "http://imola.armbian.com/apt/pool/main/a/armbian-config/armbian-config_24.5.5_all__1-SA5703-B9a9b-R448a.deb"
 
-    # Vérifier si les fichiers sont bien téléchargés
     if [[ ! -f /opt/kernel_deb/linux-image-current-sunxi.deb || ! -f /opt/kernel_deb/linux-headers-current-sunxi.deb ]]; then
         echo "❌ Erreur : Impossible de télécharger les fichiers kernel."
         exit 1
@@ -145,77 +138,7 @@ fixsunxi() {
 
     echo "✅ Tous les fichiers nécessaires sont prêts pour le premier démarrage."
 
-    # 🛠 **Modifier `armbian-check-first-login.sh` pour inclure le kernel et le Wi-Fi avant `firstlogin`**
-    echo "✍️ Modification de `armbian-check-first-login.sh`..."
-
-    cat << 'EOF' > /usr/lib/armbian/armbian-check-first-login.sh
-#!/bin/bash
-echo "🚀 Vérification du premier login et installation du kernel..."
-
-# Vérifier si le kernel est déjà installé
-if [[ ! -f /opt/kernel_installed ]]; then
-    echo "🔧 Installation du kernel custom et `armbian-config` avant `firstlogin`..."
-
-    # ❌ Supprimer temporairement `.not_logged_in_yet` pour éviter `firstboot` prématuré
-    if [[ -f /root/.not_logged_in_yet ]]; then
-        echo "🗑 Suppression temporaire de /root/.not_logged_in_yet..."
-        sudo rm -f /root/.not_logged_in_yet
-    fi
-
-    # 📌 Installation du kernel
-    echo "⚙️ Installation du kernel..."
-    sudo dpkg -i /opt/kernel_deb/*.deb
-    if [[ $? -eq 0 ]]; then
-        echo "✅ Kernel installé avec succès !"
-    else
-        echo "❌ Erreur d'installation du kernel."
-        exit 1
-    fi
-
-    # 🔧 Installation de `armbian-config`
-    echo "⚙️ Installation d'`armbian-config` 24.5.5..."
-    sudo dpkg -i /opt/armbian_config/armbian-config_24.5.5_all.deb
-    if [[ $? -eq 0 ]]; then
-        echo "✅ `armbian-config` installé et verrouillé."
-        sudo apt-mark hold armbian-config
-    else
-        echo "❌ Erreur d'installation d'`armbian-config`."
-        exit 1
-    fi
-
-    # ✅ Vérifier et activer le Wi-Fi avant `firstboot`
-    if lsusb | grep -iq "wireless"; then
-        echo "✅ Clé Wi-Fi détectée, activation immédiate..."
-        sudo systemctl restart NetworkManager.service
-    else
-        echo "⚠️ Aucune clé Wi-Fi détectée, configuration manuelle requise."
-    fi
-
-    # ✅ Marquer l’installation comme terminée pour éviter les exécutions répétées
-    touch /opt/kernel_installed
-
-    # 🔄 **Forcer un redémarrage immédiat AVANT `firstboot`**
-    echo "🔄 Redémarrage immédiat pour charger le bon kernel..."
-    sync && sudo reboot -f
-    exit 0  # Empêche `armbian-firstlogin` de s'exécuter immédiatement après le premier boot
-fi
-
-# ✅ Si le kernel est déjà installé, on lance `armbian-firstlogin`
-if [ -w /root/ -a -f /root/.not_logged_in_yet ]; then
-    bash /usr/lib/armbian/armbian-firstlogin
-fi
-EOF
-
-    # Donner les permissions d'exécution
-    chmod +x /usr/lib/armbian/armbian-check-first-login.sh
-
-    echo "✅ `armbian-check-first-login.sh` modifié avec succès !"
-
     echo "Fix sunxi ... [DONE]"
 }
 
-
-
-
-
-Main "S{@}"
+Main "$@"
