@@ -38,7 +38,7 @@ Main() {
                 installScreensaverSetup
             fi
             if [[ "${RELEASE}" = "bookworm" ]]; then
-                fixsunxi
+                #fixsunxi
             fi
             ;;
     esac
