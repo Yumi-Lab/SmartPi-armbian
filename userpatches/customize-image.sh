@@ -21,8 +21,6 @@ BOARD=$3
 BUILD_DESKTOP=$4
 
 
-sudo apt update && sudo apt install -y armbian-config wireless-tools wpasupplicant iw rfkill network-manager
-
 
 Main() {
     case "${BOARD}" in
