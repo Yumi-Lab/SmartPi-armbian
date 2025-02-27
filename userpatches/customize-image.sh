@@ -33,13 +33,15 @@ Main() {
                 patchOnboardAutostart
                 installScreensaverSetup
             fi
+            if [[ "${RELEASE}" = "bookworm" ]]; then
+                echo "release bookworm"
+            fi
             ;;
     esac
 }
 
 rotateConsole() {
-    local bootcfg
-    bootcfg="/boot/armbianEnv.txt"
+    local bootcfg="/boot/armbianEnv.txt"
     echo "Rotate tty console by default ..."
     echo "extraargs=fbcon=rotate:2" >> "${bootcfg}"
     echo "Current configuration (${bootcfg}):"
@@ -48,8 +50,8 @@ rotateConsole() {
 }
 
 rotateScreen() {
-    src="/tmp/overlay/02-smartpad-rotate-screen.conf"
-    dest="/etc/X11/xorg.conf.d/"
+    local src="/tmp/overlay/02-smartpad-rotate-screen.conf"
+    local dest="/etc/X11/xorg.conf.d/"
     echo "Install rotated screen configuration ..."
     cp -v "${src}" "${dest}"
     echo "DEBUG:"
@@ -58,8 +60,8 @@ rotateScreen() {
 }
 
 rotateTouch() {
-    src="/tmp/overlay/03-smartpad-rotate-touch.conf"
-    dest="/etc/X11/xorg.conf.d/"
+    local src="/tmp/overlay/03-smartpad-rotate-touch.conf"
+    local dest="/etc/X11/xorg.conf.d/"
     echo "Install rotated touch configuration ..."
     cp -v "${src}" "${dest}"
     echo "DEBUG:"
@@ -68,18 +70,17 @@ rotateTouch() {
 }
 
 disableDPMS() {
-    src="/tmp/overlay/04-smartpad-disable-dpms.conf"
-    dest="/etc/X11/xorg.conf.d/"
-    echo "Install rotated touch configuration ..."
+    local src="/tmp/overlay/04-smartpad-disable-dpms.conf"
+    local dest="/etc/X11/xorg.conf.d/"
+    echo "Disable DPMS power management ..."
     cp -v "${src}" "${dest}"
     echo "DEBUG:"
     ls -l "${dest}"
-    echo "Install rotated touch configuration ... [DONE]"
+    echo "Disable DPMS power management ... [DONE]"
 }
 
 patchLightdm() {
-    local conf
-    conf="/etc/lightdm/lightdm.conf.d/12-onboard.conf"
+    local conf="/etc/lightdm/lightdm.conf.d/12-onboard.conf"
     echo "Enable OnScreen Keyboard in Lightdm ..."
     echo "onscreen-keyboard = true" | tee "${conf}"
     echo "Enable OnScreen Keyboard in Lightdm ... [DONE]"
@@ -93,21 +94,21 @@ copyOnboardConf() {
 }
 
 patchOnboardAutostart() {
-    local conf
-    conf="/etc/xdg/autostart/onboard-autostart.desktop"
+    local conf="/etc/xdg/autostart/onboard-autostart.desktop"
     echo "Patch Onboard Autostart file ..."
     sed -i '/OnlyShowIn/s/^/# /' "${conf}"
     echo "Patch Onboard Autostart file ... [DONE]"
 }
 
 installScreensaverSetup() {
-    src="/tmp/overlay/skel-xscreensaver"
-    dest="/etc/skel/.xscreensaver"
-    echo "Install rotated touch configuration ..."
+    local src="/tmp/overlay/skel-xscreensaver"
+    local dest="/etc/skel/.xscreensaver"
+    echo "Install screensaver configuration ..."
     \cp -fv "${src}" "${dest}"
     echo "DEBUG:"
-    ls -al "$(dirname ${dest})"
-    echo "Install rotated touch configuration ... [DONE]"
+    ls -al "$(dirname "${dest}")"
+    echo "Install screensaver configuration ... [DONE]"
 }
 
-Main "S{@}"
+
+Main "$@"
