@@ -31,18 +31,19 @@ jobs:
       release_tag: ${{ steps.release_tag.outputs.release_tag }}
       tag_name: ${{ steps.time.outputs.time }}
     steps:
+      - name: Checkout main branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: "main"
+          path: "repository"
+
       - name: Get Time
         id: time
         uses: nanzm/get-time-action@v2.0
         with:
           timeZone: UTC
           format: "YYYYMMDD-HHmm"
-
-      - name: Checkout main branch
-        uses: actions/checkout@v4
-        with:
-          ref: "main"
-          path: "repository"
 
       - name: Generate Release Tag
         id: release_tag
@@ -54,8 +55,13 @@ jobs:
 
       - name: Create and Push Git Tag
         run: |
+          cd repository
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
+          git init  # Initialise le repo si ce n'est pas reconnu comme un dépôt Git
+          git remote add origin https://github.com/${{ github.repository }}.git || true
+          git fetch origin
+          git checkout main
           git tag -a "$release_tag" -m "Release $release_tag"
           git push origin "$release_tag"
 
