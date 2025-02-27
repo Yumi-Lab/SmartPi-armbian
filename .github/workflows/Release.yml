@@ -44,28 +44,27 @@ jobs:
           ref: "main"
           path: "repository"
 
-      - name: Generate and Check Release Tag
+      - name: Generate Release Tag
         id: release_tag
-        shell: bash
         run: |
-          time="${{ steps.time.outputs.time }}"
-          version="v1.0.0"  # Ajoutez ici la version correcte si nécessaire
-          echo "release_tag=${version}-${time}" >> $GITHUB_OUTPUT
-          echo "Generated Release Tag: ${version}-${time}"
+          version="v1.0.0"
+          tag_name="${version}-${{ steps.time.outputs.time }}"
+          echo "release_tag=${tag_name}" >> $GITHUB_ENV
+          echo "Generated Release Tag: ${tag_name}"
 
-      - name: Create Git Tag
+      - name: Create and Push Git Tag
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
-          git tag -a "${{ steps.release_tag.outputs.release_tag }}" -m "Release ${{ steps.release_tag.outputs.release_tag }}"
-          git push origin "${{ steps.release_tag.outputs.release_tag }}"
+          git tag -a "$release_tag" -m "Release $release_tag"
+          git push origin "$release_tag"
 
-      - name: Create empty release
+      - name: Create GitHub Release
         id: release
         uses: softprops/action-gh-release@v1
         with:
-          name: ${{ steps.release_tag.outputs.release_tag }}
-          tag_name: ${{ steps.release_tag.outputs.release_tag }}
+          name: ${{ env.release_tag }}
+          tag_name: ${{ env.release_tag }}
           token: ${{ secrets.GITHUB_TOKEN }}
           draft: true
 
@@ -143,7 +142,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: ./build/output/images/*
-          tag_name: ${{ steps.release_tag.outputs.release_tag }}
+          tag_name: ${{ env.release_tag }}
           token: ${{ secrets.GITHUB_TOKEN }}
           draft: false  # Met à `false` si tu veux une release publique
 
