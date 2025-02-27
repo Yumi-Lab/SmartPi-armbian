@@ -135,9 +135,10 @@ jobs:
           mv *.txt ${{ steps.image_name.outputs.image_name }}.txt
 
       - name: Compressing Image
+        timeout-minutes: 30  # Augmente le temps maximum autorisé
         run: |
           cd ${{ github.workspace }}/build/output/images/
-          xz -efkvzT0 ${{ steps.image_name.outputs.image_name }}.img || true
+          xz --fast -T4 ${{ steps.image_name.outputs.image_name }}.img || true
 
       - name: Calculating checksums
         run: |
