@@ -50,20 +50,18 @@ jobs:
         run: |
           version="v1.0.0"
           tag_name="${version}-${{ steps.time.outputs.time }}"
-          echo "release_tag=${tag_name}" >> $GITHUB_ENV
+          echo "release_tag=${tag_name}" >> $GITHUB_OUTPUT  # Utilisation correcte
           echo "Generated Release Tag: ${tag_name}"
 
       - name: Create and Push Git Tag
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
-          cd repository  # S'assurer d'être dans le bon dossier du repo
           git tag -a "${{ env.release_tag }}" -m "Release ${{ env.release_tag }}"
           git push origin "${{ env.release_tag }}" --force
 
       - name: Check Git Tags
         run: |
-          cd repository
           git tag
           git show-ref --tags
 
@@ -151,9 +149,9 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: ./build/output/images/*
-          tag_name: ${{ env.release_tag }}
+          tag_name: ${{ steps.release_tag.outputs.release_tag }}  # Assure-toi d'utiliser la bonne sortie
           token: ${{ secrets.GITHUB_TOKEN }}
-          draft: false  # Met à `false` si tu veux une release publique
+          draft: false
 
       - name: Upload Checksum to Release
         if: needs.release.outputs.id != ''
