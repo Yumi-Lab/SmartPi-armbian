@@ -34,10 +34,18 @@ runs:
     - name: Checkout armbian Repository
       uses: actions/checkout@v4
       with:
-        fetch-depth: 1
+        #fetch-depth: 1
+        fetch-depth: 0
         repository: ${{ steps.config.outputs.armbian_repository }}
         ref: ${{ steps.config.outputs.armbian_branch }}
         path: build
+
+    - name: Update Armbian Repository
+      shell: bash
+      run: |
+        cd build
+        git pull origin ${{ steps.config.outputs.armbian_branch }}
+
 
     - name: Create config-default.conf
       shell: bash
