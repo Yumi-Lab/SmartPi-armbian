@@ -148,15 +148,14 @@ jobs:
           cd ${{ github.workspace }}/build/output/images/
           sha256sum ${{ steps.image_name.outputs.image_name }}.img.xz > ${{ steps.image_name.outputs.image_name }}.img.xz.sha256
 
-      - name: Upload Image to Release
-        if: needs.release.outputs.id != ''
-        uses: xresloader/upload-to-github-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload Files to Release
+        uses: softprops/action-gh-release@v1
         with:
-          release_id: ${{ needs.release.outputs.id }}
-          file: ./build/output/images/*.img.xz
-          draft: true
+          files: ./build/output/images/*
+          tag_name: ${{ steps.release_tag.outputs.release_tag }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          draft: false  # Met à `false` si tu veux une release publique
+
 
       - name: Upload Checksum to Release
         if: needs.release.outputs.id != ''
