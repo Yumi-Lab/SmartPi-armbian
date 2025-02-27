@@ -29,37 +29,43 @@ jobs:
     outputs:
       id: ${{ steps.release.outputs.id }}
       release_tag: ${{ steps.release_tag.outputs.release_tag }}
+      tag_name: ${{ steps.time.outputs.time }}
     steps:
+      - name: Get Time
+        id: time
+        uses: nanzm/get-time-action@v2.0
+        with:
+          timeZone: UTC
+          format: "YYYYMMDD-HHmm"
+
       - name: Checkout main branch
         uses: actions/checkout@v4
         with:
           ref: "main"
+          path: "repository"
 
-      - name: Get Time
-        id: time
-        run: echo "::set-output name=time::$(date +'%Y%m%d-%H%M')"
-
-      - name: Generate Release Tag
+      - name: Generate and Check Release Tag
         id: release_tag
+        shell: bash
         run: |
-          version="v1.0.0"
-          tag_name="${version}-${{ steps.time.outputs.time }}"
-          echo "release_tag=${tag_name}" >> $GITHUB_ENV
-          echo "Generated Release Tag: ${tag_name}"
+          time="${{ steps.time.outputs.time }}"
+          version="v1.0.0"  # Ajoutez ici la version correcte si nécessaire
+          echo "release_tag=${version}-${time}" >> $GITHUB_OUTPUT
+          echo "Generated Release Tag: ${version}-${time}"
 
-      - name: Create and Push Git Tag
+      - name: Create Git Tag
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
-          git tag -a "$release_tag" -m "Release $release_tag"
-          git push origin "$release_tag"
+          git tag -a "${{ steps.release_tag.outputs.release_tag }}" -m "Release ${{ steps.release_tag.outputs.release_tag }}"
+          git push origin "${{ steps.release_tag.outputs.release_tag }}"
 
-      - name: Create GitHub Release
+      - name: Create empty release
         id: release
         uses: softprops/action-gh-release@v1
         with:
-          name: ${{ env.release_tag }}
-          tag_name: ${{ env.release_tag }}
+          name: ${{ steps.release_tag.outputs.release_tag }}
+          tag_name: ${{ steps.release_tag.outputs.release_tag }}
           token: ${{ secrets.GITHUB_TOKEN }}
           draft: true
 
@@ -72,43 +78,116 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: "main"
 
       - name: Create Matrix
         id: set-matrix
         run: |
-          JSON=$(find configs -type f -name "*.conf" -printf '%f\n' | sed '/config*/d;s#.conf##' | jq -R -s -c 'split("\n")[:-1]')
+          JSON=$(find ${{ github.workspace }}/configs -type f -name "*.conf" -printf '%f\n' | sed '/config*/d;s#.conf##' | jq -R -s -c 'split("\n")[:-1]')
           echo "configfiles=${JSON}" >> $GITHUB_OUTPUT
+          echo "::group::Build Matrix"
+          echo "${JSON}"
+          echo "::endgroup::"
 
   build:
     name: Build Images
     runs-on: ubuntu-latest
-    needs: [release, setup]
+    needs: [update-main-branch, release, setup]
     strategy:
+      fail-fast: true
       matrix:
         configfile: ${{ fromJson(needs.setup.outputs.configfiles) }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          ref: "main"
+          path: build-configs
+          fetch-depth: 0
 
       - name: Build
-        uses: ./actions/build-image
+        uses: ./build-configs/actions/build-image
         with:
           configfile: ${{ matrix.configfile }}
 
-      - name: Compress Image
+      - name: Generate Name Prefix
+        id: image_name
+        shell: bash
         run: |
-          cd build/output/images/
-          xz -efkvzT0 *.img
+          source ./build-configs/configs/config-default.conf
+          img_name="${VENDOR}"
+          img_name="${img_name}-${{ matrix.configfile }}"
+          echo "image_name=${img_name}" >> $GITHUB_OUTPUT
+          echo "::group::Image name"
+          echo "Image name: ${img_name}"
+          echo "::endgroup::"
 
-      - name: Calculate Checksums
+      - name: Rename Files
         run: |
-          cd build/output/images/
-          sha256sum *.img.xz > *.img.xz.sha256
+          cd ${{ github.workspace }}/build/output/images/
+          mv *.img ${{ steps.image_name.outputs.image_name }}.img
+          mv *.txt ${{ steps.image_name.outputs.image_name }}.txt
+
+      - name: Compressing Image
+        run: |
+          cd ${{ github.workspace }}/build/output/images/
+          xz -efkvzT0 ${{ steps.image_name.outputs.image_name }}.img || true
+
+      - name: Calculating checksums
+        run: |
+          cd ${{ github.workspace }}/build/output/images/
+          sha256sum ${{ steps.image_name.outputs.image_name }}.img.xz > ${{ steps.image_name.outputs.image_name }}.img.xz.sha256
 
       - name: Upload Files to Release
         uses: softprops/action-gh-release@v1
         with:
-          files: build/output/images/*
-          tag_name: ${{ env.release_tag }}
+          files: ./build/output/images/*
+          tag_name: ${{ steps.release_tag.outputs.release_tag }}
           token: ${{ secrets.GITHUB_TOKEN }}
-          draft: false
+          draft: false  # Met à `false` si tu veux une release publique
+
+      - name: Upload Checksum to Release
+        if: needs.release.outputs.id != ''
+        uses: xresloader/upload-to-github-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          release_id: ${{ needs.release.outputs.id }}
+          file: ./build/output/images/*.sha256
+          draft: true
+
+      - name: Upload Config to Release
+        if: needs.release.outputs.id != ''
+        uses: xresloader/upload-to-github-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          release_id: ${{ needs.release.outputs.id }}
+          file: ./build/output/images/*.txt
+          draft: true
+
+  finish:
+    name: Finish release
+    needs: [release, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish Release
+        uses: StuYarrow/publish-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          id: ${{ needs.release.outputs.id }}
+
+  cleanup:
+    name: Cleanup
+    needs: [release, build]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete drafts
+        uses: hugo19941994/delete-draft-releases@v1.0.0
+        with:
+          threshold: 2d
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
