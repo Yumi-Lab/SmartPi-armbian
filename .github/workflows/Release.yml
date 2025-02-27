@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: everlytic/branch-merge@1.1.5
         with:
-          github_token: ${{ secrets.PAT }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           source_ref: "develop"
           target_branch: "main"
           commit_message_template: "[Automated] Merged {source_ref} into target {target_branch}"
