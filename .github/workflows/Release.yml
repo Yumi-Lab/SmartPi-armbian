@@ -18,6 +18,7 @@ jobs:
           target_branch: "main"
           commit_message_template: "[Automated] Merged {source_ref} into target {target_branch}"
 
+
   release:
     name: Create Release
     runs-on: ubuntu-latest
