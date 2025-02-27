@@ -34,7 +34,6 @@ Main() {
                 installScreensaverSetup
             fi
             if [[ "${RELEASE}" = "bookworm" ]]; then
-                #fixsunxi
                 echo "release bookworm"
             fi
             ;;
@@ -111,34 +110,5 @@ installScreensaverSetup() {
     echo "Install screensaver configuration ... [DONE]"
 }
 
-fixsunxi() {
-    echo "Fix sunxi ..."
-
-    mkdir -p /opt/kernel_deb
-    mkdir -p /opt/armbian_config
-
-    GITHUB_REPO="https://raw.githubusercontent.com/Yumi-Lab/SmartPi-armbian/develop/userpatches/header"
-
-    echo "📥 Téléchargement des fichiers kernel..."
-    curl -L -o /opt/kernel_deb/linux-image-current-sunxi.deb "$GITHUB_REPO/linux-image-current-sunxi_24.2.1_armhf.deb"
-    curl -L -o /opt/kernel_deb/linux-headers-current-sunxi.deb "$GITHUB_REPO/linux-headers-current-sunxi_24.2.1_armhf.deb"
-
-    echo "📥 Téléchargement de `armbian-config` 24.5.5..."
-    wget -O /opt/armbian_config/armbian-config_24.5.5_all.deb "http://imola.armbian.com/apt/pool/main/a/armbian-config/armbian-config_24.5.5_all__1-SA5703-B9a9b-R448a.deb"
-
-    if [[ ! -f /opt/kernel_deb/linux-image-current-sunxi.deb || ! -f /opt/kernel_deb/linux-headers-current-sunxi.deb ]]; then
-        echo "❌ Erreur : Impossible de télécharger les fichiers kernel."
-        exit 1
-    fi
-
-    if [[ ! -f /opt/armbian_config/armbian-config_24.5.5_all.deb ]]; then
-        echo "❌ Erreur : Impossible de télécharger `armbian-config`."
-        exit 1
-    fi
-
-    echo "✅ Tous les fichiers nécessaires sont prêts pour le premier démarrage."
-
-    echo "Fix sunxi ... [DONE]"
-}
 
 Main "$@"
