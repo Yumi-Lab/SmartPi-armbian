@@ -1,20 +1,51 @@
-name: Release Images
+name: Release SmartPi Armbian
+
 on:
   workflow_dispatch:
-
-concurrency:
-  group: ci-release-${{ github.ref }}-1
-  cancel-in-progress: true
+    inputs:
+      version:
+        type: string
+        description: "Nouvelle version en x.x.x"
+        required: true
 
 jobs:
-  update-main-branch:
-    name: Update main branch
+  push-version-number:
+    name: Push Version Number
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout develop branch
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: "develop"
 
+      - name: Get Current Version
+        id: current-version
+        shell: bash
+        run: |
+          source ./configs/config-default.conf
+          echo "current_version=${DIST_VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Update Version Number
+        if: steps.current-version.outputs.current_version != github.event.inputs.version
+        shell: bash
+        run: |
+          sed -i "s|^DIST_VERSION=.*|DIST_VERSION=\"${{ github.event.inputs.version }}\"|" ./configs/config-default.conf
+
+      - name: Commit & Push Version Update
+        if: steps.current-version.outputs.current_version != github.event.inputs.version
+        uses: EndBug/add-and-commit@v9
+        with:
+          add: "./configs/config-default.conf"
+          default_author: github_actions
+          message: "chore: push version number to v${{ github.event.inputs.version }}"
+          push: true
+
+  update-main-branch:
+    name: Update Main Branch
+    needs: push-version-number
+    runs-on: ubuntu-latest
+    steps:
       - uses: everlytic/branch-merge@1.1.5
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -24,88 +55,45 @@ jobs:
 
   release:
     name: Create Release
+    needs: update-main-branch
     runs-on: ubuntu-latest
-    needs: [update-main-branch]
     outputs:
-      id: ${{ steps.release.outputs.id }}
-      release_tag: ${{ steps.release_tag.outputs.release_tag }}
-      tag_name: ${{ steps.time.outputs.time }}
+      id: ${{ steps.create-release.outputs.id }}
+      release_tag: "v${{ github.event.inputs.version }}"
     steps:
       - name: Checkout main branch
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: "main"
-          #path: "repository"
-
-      - name: Get Time
-        id: time
-        uses: nanzm/get-time-action@v2.0
-        with:
-          timeZone: UTC
-          format: "YYYYMMDD-HHmm"
-
-      - name: Generate Release Tag
-          id: release_tag
-          run: |
-            version="v1.0.0"
-            tag_name="${version}-${{ steps.time.outputs.time }}"
-            echo "release_tag=${tag_name}" >> $GITHUB_ENV
-            echo "Generated Release Tag: ${tag_name}"
-  
-
-      - name: Debug Release Tag
-          run: |
-            echo "Generated Release Tag: ${{ steps.release_tag.outputs.release_tag }}"
-            echo "Env release_tag: ${{ env.release_tag }}"
-  
 
       - name: Fetch all tags
-        run: 
-          git fetch --tags --force
-          git tag  # Debug: affiche tous les tags existants
+        run: git fetch --tags --force
 
-      - name: Check if tag exists
-        id: check_tag
-        run: |
-            git fetch --tags --force
-            if git rev-parse "${{ env.release_tag }}" >/dev/null 2>&1; then
-              echo "tag_exists=true" >> $GITHUB_ENV
-            else
-              echo "tag_exists=false" >> $GITHUB_ENV
-            fi
-  
-          
       - name: Create and Push Git Tag
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
-          git tag -a "${{ env.release_tag }}" -m "Release ${{ env.release_tag }}"
-          git push origin "${{ env.release_tag }}"
-
-
-      - name: Check Git Tags
-        run: |
-          git tag
-          git show-ref --tags
+          git tag -a "v${{ github.event.inputs.version }}" -m "Release v${{ github.event.inputs.version }}"
+          git push origin "v${{ github.event.inputs.version }}"
 
       - name: Create GitHub Release
-        id: release
+        id: create-release
         uses: softprops/action-gh-release@v1
         with:
-          name: ${{ env.release_tag }}
-          tag_name: ${{ env.release_tag }}
           token: ${{ secrets.GITHUB_TOKEN }}
-          draft: true
+          name: "SmartPi Armbian ${{ github.event.inputs.version }}"
+          tag_name: "v${{ github.event.inputs.version }}"
+          draft: false
 
-  setup:
-    name: Create Matrix
+  matrix:
+    name: Create Build Matrix
+    needs: release
     runs-on: ubuntu-latest
-    needs: [update-main-branch, release]
     outputs:
-      configfiles: ${{ steps.set-matrix.outputs.configfiles }}
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           ref: "main"
@@ -113,111 +101,69 @@ jobs:
       - name: Create Matrix
         id: set-matrix
         run: |
-          JSON=$(find ${{ github.workspace }}/configs -type f -name "*.conf" -printf '%f\n' | sed '/config*/d;s#.conf##' | jq -R -s -c 'split("\n")[:-1]')
-          echo "configfiles=${JSON}" >> $GITHUB_OUTPUT
-          echo "::group::Build Matrix"
-          echo "${JSON}"
-          echo "::endgroup::"
+          PY_INT=$(command -v python3)
+          CONFIG="${{ github.workspace }}/.github/workflow_config.yml"
+          GROUP="release"
+          $PY_INT ${{ github.workspace }}/.github/scripts/setup_matrix.py -c $CONFIG -g $GROUP --git
 
   build:
-    name: Build Images
+    needs: [release, matrix]
     runs-on: ubuntu-latest
-    needs: [update-main-branch, release, setup]
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
-        configfile: ${{ fromJson(needs.setup.outputs.configfiles) }}
+        config: ${{ fromJson(needs.matrix.outputs.matrix) }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
           ref: "main"
-          path: build-configs
-          fetch-depth: 0
+          path: repository
+          submodules: true
 
-      - name: Build
-        uses: ./build-configs/actions/build-image
+      - name: Build Image
+        id: build
+        uses: ./repository/.github/actions/build
         with:
-          configfile: ${{ matrix.configfile }}
+          config: ${{ matrix.config }}
 
-      - name: Generate Name Prefix
-        id: image_name
+      - name: Rename Image File
+        id: move-image
         shell: bash
         run: |
-          source ./build-configs/configs/config-default.conf
-          img_name="${VENDOR}"
-          img_name="${img_name}-${{ matrix.configfile }}"
-          echo "image_name=${img_name}" >> $GITHUB_OUTPUT
-          echo "::group::Image name"
-          echo "Image name: ${img_name}"
-          echo "::endgroup::"
+          source repository/configs/config-default.conf
+          base_name="SmartPi-${{ github.event.inputs.version }}-${RELEASE}"
+          image="${base_name}-${{ steps.build.outputs.type }}-${{ steps.build.outputs.sbc }}"
+          mv repository/output/*.img $image.img
 
-      - name: Rename Files
-        run: |
-          cd ${{ github.workspace }}/build/output/images/
-          mv *.img ${{ steps.image_name.outputs.image_name }}.img
-          mv *.txt ${{ steps.image_name.outputs.image_name }}.txt
+          echo "base_name=${base_name}" >> $GITHUB_OUTPUT
+          echo "image=${image}" >> $GITHUB_OUTPUT
 
       - name: Compressing Image
-        timeout-minutes: 30  # Augmente le temps maximum autorisé
+        shell: bash
         run: |
-          cd ${{ github.workspace }}/build/output/images/
-          xz --fast -T4 ${{ steps.image_name.outputs.image_name }}.img || true
+          CPU_COUNT="$(nproc)"
+          echo -e "\e[32mUsing ${CPU_COUNT} Cores for compression...\e[0m"
+          xz -efkvz9T"${CPU_COUNT}" ${{ steps.move-image.outputs.image }}.img || true
 
-      - name: Calculating checksums
-        run: |
-          cd ${{ github.workspace }}/build/output/images/
-          sha256sum ${{ steps.image_name.outputs.image_name }}.img.xz > ${{ steps.image_name.outputs.image_name }}.img.xz.sha256
-
-      - name: Upload Files to Release
+      - name: Upload Image and Checksum
         uses: softprops/action-gh-release@v1
         with:
-          files: ./build/output/images/*
-          tag_name: ${{ steps.release_tag.outputs.release_tag }}  # Assure-toi d'utiliser la bonne sortie
+          files: |
+            ${{ steps.move-image.outputs.image }}.img
+            ${{ steps.move-image.outputs.image }}.img.xz
+          tag_name: "v${{ github.event.inputs.version }}"
           token: ${{ secrets.GITHUB_TOKEN }}
           draft: false
 
-      - name: Upload Checksum to Release
-        if: needs.release.outputs.id != ''
-        uses: xresloader/upload-to-github-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          release_id: ${{ needs.release.outputs.id }}
-          file: ./build/output/images/*.sha256
-          draft: true
-
-      - name: Upload Config to Release
-        if: needs.release.outputs.id != ''
-        uses: xresloader/upload-to-github-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          release_id: ${{ needs.release.outputs.id }}
-          file: ./build/output/images/*.txt
-          draft: true
-
   finish:
-    name: Finish release
+    name: Finalize Release
     needs: [release, build]
     runs-on: ubuntu-latest
     steps:
       - name: Publish Release
-        uses: StuYarrow/publish-release@v1
+        uses: eregon/publish-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          id: ${{ needs.release.outputs.id }}
-
-  cleanup:
-    name: Cleanup
-    needs: [release, build]
-    if: ${{ always() }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Delete drafts
-        uses: hugo19941994/delete-draft-releases@v1.0.0
-        with:
-          threshold: 2d
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          release_id: ${{ needs.release.outputs.id }}
