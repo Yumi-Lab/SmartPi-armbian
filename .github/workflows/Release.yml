@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "28/02/2025"
+        description: "28/02/2025 Maxime"
         required: true
         type: string
 
