@@ -1,169 +1,75 @@
-name: Release SmartPi Armbian
+name: Release Images
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        type: string
-        description: "Nouvelle version en x.x.x"
+        description: "28/02/2025"
         required: true
+        type: string
 
 jobs:
-  push-version-number:
-    name: Push Version Number
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout develop branch
-        uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          ref: "develop"
-
-      - name: Get Current Version
-        id: current-version
-        shell: bash
-        run: |
-          source ./configs/config-default.conf
-          echo "current_version=${DIST_VERSION}" >> $GITHUB_OUTPUT
-
-      - name: Update Version Number
-        if: steps.current-version.outputs.current_version != github.event.inputs.version
-        shell: bash
-        run: |
-          sed -i "s|^DIST_VERSION=.*|DIST_VERSION=\"${{ github.event.inputs.version }}\"|" ./configs/config-default.conf
-
-      - name: Commit & Push Version Update
-        if: steps.current-version.outputs.current_version != github.event.inputs.version
-        uses: EndBug/add-and-commit@v9
-        with:
-          add: "./configs/config-default.conf"
-          default_author: github_actions
-          message: "chore: push version number to v${{ github.event.inputs.version }}"
-          push: true
-
-  update-main-branch:
-    name: Update Main Branch
-    needs: push-version-number
-    runs-on: ubuntu-latest
-    steps:
-      - uses: everlytic/branch-merge@1.1.5
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          source_ref: "develop"
-          target_branch: "main"
-          commit_message_template: "[Automated] Merged {source_ref} into target {target_branch}"
-
   release:
     name: Create Release
-    needs: update-main-branch
     runs-on: ubuntu-latest
     outputs:
-      id: ${{ steps.create-release.outputs.id }}
-      release_tag: "v${{ github.event.inputs.version }}"
-    steps:
-      - name: Checkout main branch
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: "main"
-
-      - name: Fetch all tags
-        run: git fetch --tags --force
-
-      - name: Create and Push Git Tag
-        run: |
-          git config --global user.name "github-actions"
-          git config --global user.email "actions@github.com"
-          git tag -a "v${{ github.event.inputs.version }}" -m "Release v${{ github.event.inputs.version }}"
-          git push origin "v${{ github.event.inputs.version }}"
-
-      - name: Create GitHub Release
-        id: create-release
-        uses: softprops/action-gh-release@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          name: "SmartPi Armbian ${{ github.event.inputs.version }}"
-          tag_name: "v${{ github.event.inputs.version }}"
-          draft: false
-
-  matrix:
-    name: Create Build Matrix
-    needs: release
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          ref: "main"
-
-      - name: Create Matrix
-        id: set-matrix
-        run: |
-          PY_INT=$(command -v python3)
-          CONFIG="${{ github.workspace }}/.github/workflow_config.yml"
-          GROUP="release"
-          $PY_INT ${{ github.workspace }}/.github/scripts/setup_matrix.py -c $CONFIG -g $GROUP --git
-
-  build:
-    needs: [release, matrix]
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        config: ${{ fromJson(needs.matrix.outputs.matrix) }}
+      release_id: ${{ steps.create-release.outputs.id }}
+      release_tag: ${{ github.event.inputs.version }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          ref: "main"
-          path: repository
-          submodules: true
+          fetch-depth: 0  # Récupère tout l'historique Git pour gérer les tags
 
-      - name: Build Image
-        id: build
-        uses: ./repository/.github/actions/build
-        with:
-          config: ${{ matrix.config }}
-
-      - name: Rename Image File
-        id: move-image
-        shell: bash
+      - name: Vérifier si le tag existe déjà
+        id: check_tag
         run: |
-          source repository/configs/config-default.conf
-          base_name="SmartPi-${{ github.event.inputs.version }}-${RELEASE}"
-          image="${base_name}-${{ steps.build.outputs.type }}-${{ steps.build.outputs.sbc }}"
-          mv repository/output/*.img $image.img
+          if git rev-parse "refs/tags/${{ github.event.inputs.version }}" >/dev/null 2>&1; then
+            echo "Tag déjà existant!"
+            exit 1
+          fi
 
-          echo "base_name=${base_name}" >> $GITHUB_OUTPUT
-          echo "image=${image}" >> $GITHUB_OUTPUT
-
-      - name: Compressing Image
-        shell: bash
+      - name: Créer et Pousser le Tag Git
         run: |
-          CPU_COUNT="$(nproc)"
-          echo -e "\e[32mUsing ${CPU_COUNT} Cores for compression...\e[0m"
-          xz -efkvz9T"${CPU_COUNT}" ${{ steps.move-image.outputs.image }}.img || true
+          git config --global user.name "github-actions"
+          git config --global user.email "actions@github.com"
+          git tag -a "${{ github.event.inputs.version }}" -m "Release ${{ github.event.inputs.version }}"
+          git push origin "${{ github.event.inputs.version }}"
 
-      - name: Upload Image and Checksum
+      - name: Créer la Release GitHub
+        id: create-release
         uses: softprops/action-gh-release@v1
         with:
-          files: |
-            ${{ steps.move-image.outputs.image }}.img
-            ${{ steps.move-image.outputs.image }}.img.xz
-          tag_name: "v${{ github.event.inputs.version }}"
-          token: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: ${{ github.event.inputs.version }}
+          name: "Release ${{ github.event.inputs.version }}"
+          body: "Nouvelle version ${{ github.event.inputs.version }} disponible"
           draft: false
+          prerelease: false
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-  finish:
-    name: Finalize Release
-    needs: [release, build]
+  upload-files:
+    name: Upload Files to Release
     runs-on: ubuntu-latest
+    needs: release
     steps:
-      - name: Publish Release
-        uses: eregon/publish-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Rechercher les fichiers d'image
+        run: |
+          echo "Liste des fichiers:"
+          ls -lah ./build/output/images/
+
+      - name: Upload Image Compressée
+        uses: softprops/action-gh-release@v1
         with:
-          release_id: ${{ needs.release.outputs.id }}
+          files: ./build/output/images/*.img.xz
+          tag_name: ${{ needs.release.outputs.release_tag }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Checksum
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ./build/output/images/*.sha256
+          tag_name: ${{ needs.release.outputs.release_tag }}
+          token: ${{ secrets.GITHUB_TOKEN }}
