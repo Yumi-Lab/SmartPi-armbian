@@ -46,31 +46,43 @@ jobs:
           format: "YYYYMMDD-HHmm"
 
       - name: Generate Release Tag
-        id: release_tag
-        run: |
-          version="v1.0.0"
-          tag_name="${version}-${{ steps.time.outputs.time }}"
-          echo "release_tag=${tag_name}" >> $GITHUB_OUTPUT
-          echo "release_tag=${tag_name}" >> $GITHUB_ENV
-          echo "Generated Release Tag: ${tag_name}"
+          id: release_tag
+          run: |
+            version="v1.0.0"
+            tag_name="${version}-${{ steps.time.outputs.time }}"
+            echo "release_tag=${tag_name}" >> $GITHUB_ENV
+            echo "Generated Release Tag: ${tag_name}"
+  
 
       - name: Debug Release Tag
-        run: |
-          echo "Generated Release Tag: ${{ steps.release_tag.outputs.release_tag }}"
+          run: |
+            echo "Generated Release Tag: ${{ steps.release_tag.outputs.release_tag }}"
+            echo "Env release_tag: ${{ env.release_tag }}"
+  
 
       - name: Fetch all tags
         run: 
           git fetch --tags --force
           git tag  # Debug: affiche tous les tags existants
 
+      - name: Check if tag exists
+        id: check_tag
+        run: |
+            git fetch --tags --force
+            if git rev-parse "${{ env.release_tag }}" >/dev/null 2>&1; then
+              echo "tag_exists=true" >> $GITHUB_ENV
+            else
+              echo "tag_exists=false" >> $GITHUB_ENV
+            fi
+  
           
       - name: Create and Push Git Tag
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
-          cd $GITHUB_WORKSPACE  # Vérifie que tu es bien dans le dépôt
           git tag -a "${{ env.release_tag }}" -m "Release ${{ env.release_tag }}"
-          git push origin "${{ env.release_tag }}" --force
+          git push origin "${{ env.release_tag }}"
+
 
       - name: Check Git Tags
         run: |
