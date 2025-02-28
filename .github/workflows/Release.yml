@@ -4,17 +4,52 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version de la release (ex: v1.5.0)"
+        description: "Numéro de version (ex: v1.5.0)"
         required: true
         type: string
 
 jobs:
-  release:
-    name: Create Release
+  retrieve-build:
+    name: Récupérer le dernier Build Réussi
     runs-on: ubuntu-latest
     outputs:
-      release_id: ${{ steps.create-release.outputs.id }}
       release_tag: ${{ github.event.inputs.version }}
+    steps:
+      - name: Récupérer l'ID du dernier build réussi
+        id: last_successful_build
+        run: |
+          RUN_ID=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          "https://api.github.com/repos/${{ github.repository }}/actions/runs?status=success&branch=develop" | jq -r '.workflow_runs[0].id')
+          
+          echo "Dernier build réussi: $RUN_ID"
+          echo "RUN_ID=$RUN_ID" >> $GITHUB_ENV
+
+      - name: Télécharger les artefacts du dernier build
+        run: |
+          mkdir -p ./build/output/images/
+          curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          "https://api.github.com/repos/${{ github.repository }}/actions/runs/$RUN_ID/artifacts" | jq -r '.artifacts[] | select(.name | test(".*img.xz")) | .archive_download_url' | while read url; do
+            curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -L "$url" -o ./build/output/images/artifact.zip
+            unzip ./build/output/images/artifact.zip -d ./build/output/images/
+          done
+
+      - name: Vérifier la présence des fichiers
+        run: |
+          echo "Fichiers disponibles après extraction:"
+          ls -lah ./build/output/images/
+
+      - name: Sauvegarder les fichiers générés pour le prochain job
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-images
+          path: ./build/output/images/
+
+  create-release:
+    name: Créer la Release
+    runs-on: ubuntu-latest
+    needs: retrieve-build
+    outputs:
+      release_id: ${{ steps.create-release.outputs.id }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -29,7 +64,7 @@ jobs:
             exit 1
           fi
 
-      - name: Créer et Pousser le Tag Git
+      - name: Créer et pousser le Tag Git
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
@@ -47,47 +82,32 @@ jobs:
           prerelease: false
           token: ${{ secrets.GITHUB_TOKEN }}
 
-  retrieve-build:
-    name: Récupérer le dernier Build Réussi
-    runs-on: ubuntu-latest
-    needs: release
-    steps:
-      - name: Télécharger les fichiers du dernier build réussi
-        run: |
-          RUN_ID=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-          "https://api.github.com/repos/${{ github.repository }}/actions/runs?status=success&branch=develop" | jq -r '.workflow_runs[0].id')
-          echo "Dernier build réussi: $RUN_ID"
-
-          mkdir -p ./build/output/images/
-          curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-          "https://api.github.com/repos/${{ github.repository }}/actions/runs/$RUN_ID/artifacts" | jq -r '.artifacts[] | select(.name | test(".*img.xz")) | .archive_download_url' | while read url; do
-            curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" -L "$url" -o ./build/output/images/artifact.zip
-            unzip ./build/output/images/artifact.zip -d ./build/output/images/
-          done
-
-      - name: Vérifier l'existence des fichiers
-        run: ls -lah ./build/output/images/
-
   upload-files:
-    name: Upload Files to Release
+    name: Upload des fichiers vers la Release
     runs-on: ubuntu-latest
-    needs: retrieve-build
+    needs: [create-release, retrieve-build]
     steps:
-      - name: Vérifier les fichiers d'image
+      - name: Récupérer les fichiers générés
+        uses: actions/download-artifact@v4
+        with:
+          name: build-images
+          path: ./build/output/images/
+
+      - name: Vérifier les fichiers après récupération
         run: |
-          echo "Liste des fichiers disponibles:"
+          echo "Fichiers après récupération:"
           ls -lah ./build/output/images/
 
-      - name: Upload Image Compressée
+      - name: Upload des Images Compressées
         uses: softprops/action-gh-release@v1
         with:
           files: ./build/output/images/*.img.xz
-          tag_name: ${{ needs.release.outputs.release_tag }}
+          tag_name: ${{ github.event.inputs.version }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload Checksum
+      - name: Upload des Checksums
         uses: softprops/action-gh-release@v1
         with:
           files: ./build/output/images/*.sha256
-          tag_name: ${{ needs.release.outputs.release_tag }}
+          tag_name: ${{ github.event.inputs.version }}
           token: ${{ secrets.GITHUB_TOKEN }}
