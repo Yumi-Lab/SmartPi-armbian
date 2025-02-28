@@ -50,8 +50,8 @@ jobs:
         run: |
           version="v1.0.0"
           tag_name="${version}-${{ steps.time.outputs.time }}"
-          echo "${{ env.release_tag }}" >> $GITHUB_OUTPUT
-          echo "${{ env.release_tag }}" >> $GITHUB_ENV
+          echo "release_tag=${tag_name}" >> $GITHUB_OUTPUT
+          echo "release_tag=${tag_name}" >> $GITHUB_ENV
           echo "Generated Release Tag: ${tag_name}"
 
       - name: Debug Release Tag
@@ -59,7 +59,9 @@ jobs:
           echo "Generated Release Tag: ${{ steps.release_tag.outputs.release_tag }}"
 
       - name: Fetch all tags
-        run: git fetch --tags --force
+        run: 
+          git fetch --tags --force
+          git tag  # Debug: affiche tous les tags existants
 
           
       - name: Create and Push Git Tag
