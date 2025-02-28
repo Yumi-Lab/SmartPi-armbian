@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "28/02/2025 Maxime"
+        description: "img for Smartpi1 or Smartpad"
         required: true
         type: string
 
@@ -19,7 +19,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Récupère tout l'historique Git pour gérer les tags
+          fetch-depth: 0  # Récupérer tout l'historique Git pour gérer les tags
 
       - name: Vérifier si le tag existe déjà
         id: check_tag
@@ -47,19 +47,29 @@ jobs:
           prerelease: false
           token: ${{ secrets.GITHUB_TOKEN }}
 
-  upload-files:
-    name: Upload Files to Release
+  fetch-build-files:
+    name: Récupérer le dernier Build Réussi
     runs-on: ubuntu-latest
     needs: release
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - name: Télécharger les fichiers du dernier build réussi
+        uses: dawidd6/action-download-artifact@v2
+        with:
+          workflow: BuildImages.yml  # Workflow de build
+          workflow_conclusion: success  # Prend uniquement les builds réussis
+          branch: develop  # Branche où le build a été exécuté
+          path: ./build/output/images/  # Où télécharger les fichiers
 
-      - name: Rechercher les fichiers d'image
+      - name: Vérifier les fichiers téléchargés
         run: |
-          echo "Liste des fichiers:"
-          ls -lah ./build/output/images/
+          echo "Fichiers récupérés :"
+          ls -lah ./build/output/images/ || echo "Aucun fichier trouvé!"
 
+  upload-files:
+    name: Upload Files to Release
+    runs-on: ubuntu-latest
+    needs: [release, fetch-build-files]
+    steps:
       - name: Upload Image Compressée
         uses: softprops/action-gh-release@v1
         with:
