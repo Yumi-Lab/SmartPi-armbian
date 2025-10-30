@@ -33,8 +33,8 @@ Main() {
                 patchOnboardAutostart
                 installScreensaverSetup
             fi
-            if [[ "${RELEASE}" = "bookworm" ]]; then
-                echo "release bookworm"
+            if [[ "${RELEASE}" = "trixie" ]]; then
+                echo "release trixie"
             fi
             ;;
     esac
