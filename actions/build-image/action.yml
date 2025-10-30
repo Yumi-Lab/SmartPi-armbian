@@ -85,6 +85,16 @@ runs:
         cat ./build/VERSION
         echo "::endgroup::"
 
+    - name: Enable QEMU for ARM builds
+      shell: bash
+      run: |
+        echo "⚙️ Installing and enabling QEMU binfmt for ARM"
+        sudo apt-get update
+        sudo apt-get install -y qemu-user-static binfmt-support qemu-system-arm
+        sudo update-binfmts --enable qemu-arm
+        sudo update-binfmts --enable qemu-aarch64
+        docker run --privileged --rm tonistiigi/binfmt --install all
+
     - name: Build Image
       shell: bash
       run: |
