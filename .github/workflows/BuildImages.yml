@@ -119,3 +119,52 @@ jobs:
         with:
           name: ${{ steps.image_name.outputs.image_name }}.txt
           path: ${{ github.workspace }}/build/output/images/${{ steps.image_name.outputs.image_name }}.txt
+
+  dietpi:
+    name: Convert to DietPi
+    runs-on: ubuntu-latest
+    needs: [setup, build]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Bookworm (Debian 12) - distro_target: 7
+          - configfile: smartpad-bookworm-server
+            distro_target: "7"
+          - configfile: smartpi1-bookworm-server
+            distro_target: "7"
+          # Trixie (Debian 13) - distro_target: 8
+          - configfile: smartpad-trixie-server
+            distro_target: "8"
+          - configfile: smartpi1-trixie-server
+            distro_target: "8"
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          path: build-configs
+          fetch-depth: 0
+
+      - name: Generate image name
+        id: image_name
+        shell: bash
+        run: |
+          source ./build-configs/configs/config-default.conf
+          img_name="${VENDOR}-${{ matrix.configfile }}-${{ needs.setup.outputs.time }}"
+          echo "image_name=${img_name}" >> $GITHUB_OUTPUT
+
+      - name: Enable QEMU for ARM
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-user-static binfmt-support qemu-system-arm
+          sudo update-binfmts --enable qemu-arm
+          sudo update-binfmts --enable qemu-aarch64
+          docker run --privileged --rm tonistiigi/binfmt --install all
+
+      - name: Convert to DietPi
+        uses: ./build-configs/actions/convert-dietpi
+        with:
+          image_name: ${{ steps.image_name.outputs.image_name }}
+          hw_model: "25"
+          distro_target: ${{ matrix.distro_target }}
