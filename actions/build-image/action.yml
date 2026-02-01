@@ -11,8 +11,15 @@ runs:
   steps:
     #- name: Runner prepare
     #  uses: ./actions/runner-prepare
-    - name: Setup QEMU for cross-compilation
-      uses: docker/setup-qemu-action@v3
+    - name: Enable QEMU for ARM builds
+      shell: bash
+      run: |
+        echo "⚙️ Installing and enabling QEMU binfmt for ARM"
+        sudo apt-get update
+        sudo apt-get install -y qemu-user-static binfmt-support qemu-system-arm
+        sudo update-binfmts --enable qemu-arm
+        sudo update-binfmts --enable qemu-aarch64
+        docker run --privileged --rm tonistiigi/binfmt --install all
 
     - name: Free Github Runner
       uses: descriptinc/free-disk-space@main
