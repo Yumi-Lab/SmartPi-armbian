@@ -1,0 +1,260 @@
+name: "Convert to DietPi"
+author: "Yumi"
+description: "Convert Armbian image to DietPi"
+inputs:
+  image_name:
+    description: "Name of the Armbian image artifact to convert"
+    required: true
+  hw_model:
+    description: "DietPi hardware model ID (25 = Generic Allwinner H3)"
+    required: false
+    default: "25"
+  distro_target:
+    description: "Debian version (7=Bookworm, 8=Trixie)"
+    required: false
+    default: "8"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install dependencies
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y qemu-user-static binfmt-support parted kpartx xz-utils
+
+    - name: Download Armbian image artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: ${{ inputs.image_name }}.img.xz
+        path: ./dietpi-work
+
+    - name: Extract image
+      shell: bash
+      run: |
+        cd ./dietpi-work
+        echo "Extracting image..."
+        xz -d -k ${{ inputs.image_name }}.img.xz || unxz -k ${{ inputs.image_name }}.img.xz
+        ls -la
+
+    - name: Mount image and convert to DietPi
+      shell: bash
+      run: |
+        cd ./dietpi-work
+        IMG_FILE="${{ inputs.image_name }}.img"
+
+        echo "Setting up loop device..."
+        sudo losetup -fP "$IMG_FILE"
+        LOOP_DEV=$(sudo losetup -j "$IMG_FILE" | cut -d: -f1)
+        echo "Loop device: $LOOP_DEV"
+
+        # Find root partition (usually p1 or p2)
+        if [ -b "${LOOP_DEV}p2" ]; then
+          ROOT_PART="${LOOP_DEV}p2"
+        else
+          ROOT_PART="${LOOP_DEV}p1"
+        fi
+        echo "Root partition: $ROOT_PART"
+
+        # Mount root filesystem
+        sudo mkdir -p /mnt/dietpi
+        sudo mount "$ROOT_PART" /mnt/dietpi
+
+        # Mount boot if separate
+        if [ -b "${LOOP_DEV}p1" ] && [ "$ROOT_PART" != "${LOOP_DEV}p1" ]; then
+          sudo mkdir -p /mnt/dietpi/boot
+          sudo mount "${LOOP_DEV}p1" /mnt/dietpi/boot
+        fi
+
+        # Setup chroot
+        sudo mount --bind /dev /mnt/dietpi/dev
+        sudo mount --bind /dev/pts /mnt/dietpi/dev/pts
+        sudo mount --bind /proc /mnt/dietpi/proc
+        sudo mount --bind /sys /mnt/dietpi/sys
+
+        # Copy DNS configuration for network access in chroot
+        # Remove existing resolv.conf (may be a symlink) and copy content
+        sudo rm -f /mnt/dietpi/etc/resolv.conf
+        sudo cp -L /etc/resolv.conf /mnt/dietpi/etc/resolv.conf
+
+        # Copy QEMU binary for ARM emulation
+        sudo cp /usr/bin/qemu-arm-static /mnt/dietpi/usr/bin/
+
+        # Create a fake systemctl wrapper for chroot environment
+        # This handles systemctl commands that fail because systemd isn't PID 1
+        sudo tee /mnt/dietpi/usr/local/bin/systemctl << 'FAKESYSTEMCTL'
+        #!/bin/bash
+        # Fake systemctl for chroot environments where systemd is not running
+        # Handles enable/disable/mask/unmask by manipulating symlinks
+
+        ACTION=""
+        SERVICES=()
+        NOW=false
+        NO_RELOAD=false
+
+        while [[ $# -gt 0 ]]; do
+          case "$1" in
+            enable|disable|mask|unmask|start|stop|restart|reload|daemon-reload|is-enabled|is-active|status)
+              ACTION="$1"
+              ;;
+            --now)
+              NOW=true
+              ;;
+            --no-reload)
+              NO_RELOAD=true
+              ;;
+            -*)
+              # Ignore other flags
+              ;;
+            *)
+              SERVICES+=("$1")
+              ;;
+          esac
+          shift
+        done
+
+        # For daemon-reload, just exit successfully
+        if [[ "$ACTION" == "daemon-reload" ]]; then
+          exit 0
+        fi
+
+        # For start/stop/restart/reload without systemd, just exit successfully
+        # These can't actually run in chroot anyway
+        if [[ "$ACTION" =~ ^(start|stop|restart|reload)$ ]]; then
+          exit 0
+        fi
+
+        # For status/is-enabled/is-active, return inactive/disabled
+        if [[ "$ACTION" == "status" ]] || [[ "$ACTION" == "is-active" ]]; then
+          echo "inactive"
+          exit 3
+        fi
+        if [[ "$ACTION" == "is-enabled" ]]; then
+          echo "disabled"
+          exit 1
+        fi
+
+        for SERVICE in "${SERVICES[@]}"; do
+          # Remove .service suffix if present for file operations
+          SERVICE_NAME="${SERVICE%.service}"
+          SERVICE_FILE="${SERVICE_NAME}.service"
+
+          case "$ACTION" in
+            enable)
+              # Create symlink in multi-user.target.wants
+              mkdir -p /etc/systemd/system/multi-user.target.wants
+              if [[ -f "/lib/systemd/system/$SERVICE_FILE" ]]; then
+                ln -sf "/lib/systemd/system/$SERVICE_FILE" "/etc/systemd/system/multi-user.target.wants/$SERVICE_FILE" 2>/dev/null || true
+              fi
+              ;;
+            disable)
+              # Remove symlinks
+              rm -f "/etc/systemd/system/multi-user.target.wants/$SERVICE_FILE" 2>/dev/null || true
+              rm -f "/etc/systemd/system/$SERVICE_FILE" 2>/dev/null || true
+              ;;
+            mask)
+              # Create symlink to /dev/null
+              ln -sf /dev/null "/etc/systemd/system/$SERVICE_FILE" 2>/dev/null || true
+              ;;
+            unmask)
+              # Remove mask if it points to /dev/null
+              if [[ -L "/etc/systemd/system/$SERVICE_FILE" ]]; then
+                TARGET=$(readlink "/etc/systemd/system/$SERVICE_FILE")
+                if [[ "$TARGET" == "/dev/null" ]]; then
+                  rm -f "/etc/systemd/system/$SERVICE_FILE"
+                fi
+              fi
+              ;;
+          esac
+        done
+
+        exit 0
+        FAKESYSTEMCTL
+
+        sudo chmod +x /mnt/dietpi/usr/local/bin/systemctl
+
+        # Ensure /usr/local/bin is in PATH for chroot
+        sudo mkdir -p /mnt/dietpi/etc/profile.d
+        echo 'export PATH="/usr/local/bin:$PATH"' | sudo tee /mnt/dietpi/etc/profile.d/local-bin-path.sh
+        sudo chmod +x /mnt/dietpi/etc/profile.d/local-bin-path.sh
+
+        # Download DietPi installer
+        sudo wget -O /mnt/dietpi/tmp/dietpi-installer https://raw.githubusercontent.com/MichaIng/DietPi/master/.build/images/dietpi-installer
+        sudo chmod +x /mnt/dietpi/tmp/dietpi-installer
+
+        # Create automated config
+        sudo tee /mnt/dietpi/tmp/dietpi-automation.sh << 'DIETPI_SCRIPT'
+        #!/bin/bash
+        export GITBRANCH="master"
+        export HW_MODEL="${HW_MODEL:-25}"
+        export WIFI_REQUIRED=1
+        export DISTRO_TARGET="${DISTRO_TARGET:-8}"
+        export IMAGE_CREATOR="Yumi"
+        export PREIMAGE_INFO="Armbian"
+
+        # Run DietPi installer
+        /tmp/dietpi-installer
+        DIETPI_SCRIPT
+
+        sudo chmod +x /mnt/dietpi/tmp/dietpi-automation.sh
+
+        # Set environment variables for the script
+        echo "Running DietPi conversion..."
+        sudo chroot /mnt/dietpi /bin/bash -c "export PATH=/usr/local/bin:\$PATH && export HW_MODEL=${{ inputs.hw_model }} && export DISTRO_TARGET=${{ inputs.distro_target }} && /tmp/dietpi-automation.sh" || true
+
+        # Cleanup chroot
+        sudo rm -f /mnt/dietpi/usr/bin/qemu-arm-static
+        sudo rm -f /mnt/dietpi/tmp/dietpi-installer
+        sudo rm -f /mnt/dietpi/tmp/dietpi-automation.sh
+        sudo rm -f /mnt/dietpi/usr/local/bin/systemctl
+        sudo rm -f /mnt/dietpi/etc/profile.d/local-bin-path.sh
+
+        # Unmount
+        sudo umount /mnt/dietpi/sys || true
+        sudo umount /mnt/dietpi/proc || true
+        sudo umount /mnt/dietpi/dev/pts || true
+        sudo umount /mnt/dietpi/dev || true
+        sudo umount /mnt/dietpi/boot || true
+        sudo umount /mnt/dietpi || true
+
+        # Detach loop device
+        sudo losetup -d "$LOOP_DEV"
+
+        echo "DietPi conversion completed!"
+
+    - name: Rename and compress DietPi image
+      shell: bash
+      run: |
+        cd ./dietpi-work
+        # Transform Yumi-smartpi1-bookworm-server -> smartpi1-DietPi-bookworm-debian12-server
+        # Extract board name (smartpi1 or smartpad)
+        BOARD=$(echo "${{ inputs.image_name }}" | sed 's/^Yumi-\([^-]*\)-.*/\1/')
+        # Extract the rest (codename-type-date)
+        REST=$(echo "${{ inputs.image_name }}" | sed 's/^Yumi-[^-]*-//')
+        # Build new name: board-DietPi-rest
+        DIETPI_NAME="${BOARD}-DietPi-${REST}"
+        # Add Debian version number after codename (bookworm->debian12, trixie->debian13, bullseye->debian11)
+        DIETPI_NAME=$(echo "${DIETPI_NAME}" | sed -e 's/bookworm/bookworm-debian12/' -e 's/trixie/trixie-debian13/' -e 's/bullseye/bullseye-debian11/')
+        echo "Renaming to: ${DIETPI_NAME}"
+        mv "${{ inputs.image_name }}.img" "${DIETPI_NAME}.img"
+
+        echo "Compressing DietPi image..."
+        xz -efkvzT0 "${DIETPI_NAME}.img"
+
+        echo "Calculating checksum..."
+        sha256sum "${DIETPI_NAME}.img.xz" > "${DIETPI_NAME}.img.xz.sha256"
+
+        echo "DIETPI_IMAGE_NAME=${DIETPI_NAME}" >> $GITHUB_ENV
+        ls -la
+
+    - name: Upload DietPi image
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.DIETPI_IMAGE_NAME }}.img.xz
+        path: ./dietpi-work/${{ env.DIETPI_IMAGE_NAME }}.img.xz
+
+    - name: Upload DietPi checksum
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.DIETPI_IMAGE_NAME }}.img.xz.sha256
+        path: ./dietpi-work/${{ env.DIETPI_IMAGE_NAME }}.img.xz.sha256
