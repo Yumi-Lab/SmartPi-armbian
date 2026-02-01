@@ -127,9 +127,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        configfile:
-          - smartpad-trixie-server
-          - smartpi1-trixie-server
+        include:
+          # Bookworm (Debian 12) - distro_target: 7
+          - configfile: smartpad-bookworm-server
+            distro_target: "7"
+          - configfile: smartpi1-bookworm-server
+            distro_target: "7"
+          # Trixie (Debian 13) - distro_target: 8
+          - configfile: smartpad-trixie-server
+            distro_target: "8"
+          - configfile: smartpi1-trixie-server
+            distro_target: "8"
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -159,4 +167,4 @@ jobs:
         with:
           image_name: ${{ steps.image_name.outputs.image_name }}
           hw_model: "25"
-          distro_target: "8"
+          distro_target: ${{ matrix.distro_target }}
