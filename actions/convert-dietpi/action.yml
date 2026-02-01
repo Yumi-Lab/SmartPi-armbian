@@ -73,7 +73,9 @@ runs:
         sudo mount --bind /sys /mnt/dietpi/sys
 
         # Copy DNS configuration for network access in chroot
-        sudo cp /etc/resolv.conf /mnt/dietpi/etc/resolv.conf
+        # Remove existing resolv.conf (may be a symlink) and copy content
+        sudo rm -f /mnt/dietpi/etc/resolv.conf
+        sudo cp -L /etc/resolv.conf /mnt/dietpi/etc/resolv.conf
 
         # Copy QEMU binary for ARM emulation
         sudo cp /usr/bin/qemu-arm-static /mnt/dietpi/usr/bin/
