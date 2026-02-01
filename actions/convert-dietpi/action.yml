@@ -80,6 +80,104 @@ runs:
         # Copy QEMU binary for ARM emulation
         sudo cp /usr/bin/qemu-arm-static /mnt/dietpi/usr/bin/
 
+        # Create a fake systemctl wrapper for chroot environment
+        # This handles systemctl commands that fail because systemd isn't PID 1
+        sudo tee /mnt/dietpi/usr/local/bin/systemctl << 'FAKESYSTEMCTL'
+        #!/bin/bash
+        # Fake systemctl for chroot environments where systemd is not running
+        # Handles enable/disable/mask/unmask by manipulating symlinks
+
+        ACTION=""
+        SERVICES=()
+        NOW=false
+        NO_RELOAD=false
+
+        while [[ $# -gt 0 ]]; do
+          case "$1" in
+            enable|disable|mask|unmask|start|stop|restart|reload|daemon-reload|is-enabled|is-active|status)
+              ACTION="$1"
+              ;;
+            --now)
+              NOW=true
+              ;;
+            --no-reload)
+              NO_RELOAD=true
+              ;;
+            -*)
+              # Ignore other flags
+              ;;
+            *)
+              SERVICES+=("$1")
+              ;;
+          esac
+          shift
+        done
+
+        # For daemon-reload, just exit successfully
+        if [[ "$ACTION" == "daemon-reload" ]]; then
+          exit 0
+        fi
+
+        # For start/stop/restart/reload without systemd, just exit successfully
+        # These can't actually run in chroot anyway
+        if [[ "$ACTION" =~ ^(start|stop|restart|reload)$ ]]; then
+          exit 0
+        fi
+
+        # For status/is-enabled/is-active, return inactive/disabled
+        if [[ "$ACTION" == "status" ]] || [[ "$ACTION" == "is-active" ]]; then
+          echo "inactive"
+          exit 3
+        fi
+        if [[ "$ACTION" == "is-enabled" ]]; then
+          echo "disabled"
+          exit 1
+        fi
+
+        for SERVICE in "${SERVICES[@]}"; do
+          # Remove .service suffix if present for file operations
+          SERVICE_NAME="${SERVICE%.service}"
+          SERVICE_FILE="${SERVICE_NAME}.service"
+
+          case "$ACTION" in
+            enable)
+              # Create symlink in multi-user.target.wants
+              mkdir -p /etc/systemd/system/multi-user.target.wants
+              if [[ -f "/lib/systemd/system/$SERVICE_FILE" ]]; then
+                ln -sf "/lib/systemd/system/$SERVICE_FILE" "/etc/systemd/system/multi-user.target.wants/$SERVICE_FILE" 2>/dev/null || true
+              fi
+              ;;
+            disable)
+              # Remove symlinks
+              rm -f "/etc/systemd/system/multi-user.target.wants/$SERVICE_FILE" 2>/dev/null || true
+              rm -f "/etc/systemd/system/$SERVICE_FILE" 2>/dev/null || true
+              ;;
+            mask)
+              # Create symlink to /dev/null
+              ln -sf /dev/null "/etc/systemd/system/$SERVICE_FILE" 2>/dev/null || true
+              ;;
+            unmask)
+              # Remove mask if it points to /dev/null
+              if [[ -L "/etc/systemd/system/$SERVICE_FILE" ]]; then
+                TARGET=$(readlink "/etc/systemd/system/$SERVICE_FILE")
+                if [[ "$TARGET" == "/dev/null" ]]; then
+                  rm -f "/etc/systemd/system/$SERVICE_FILE"
+                fi
+              fi
+              ;;
+          esac
+        done
+
+        exit 0
+        FAKESYSTEMCTL
+
+        sudo chmod +x /mnt/dietpi/usr/local/bin/systemctl
+
+        # Ensure /usr/local/bin is in PATH for chroot
+        sudo mkdir -p /mnt/dietpi/etc/profile.d
+        echo 'export PATH="/usr/local/bin:$PATH"' | sudo tee /mnt/dietpi/etc/profile.d/local-bin-path.sh
+        sudo chmod +x /mnt/dietpi/etc/profile.d/local-bin-path.sh
+
         # Download DietPi installer
         sudo wget -O /mnt/dietpi/tmp/dietpi-installer https://raw.githubusercontent.com/MichaIng/DietPi/master/.build/images/dietpi-installer
         sudo chmod +x /mnt/dietpi/tmp/dietpi-installer
@@ -102,12 +200,14 @@ runs:
 
         # Set environment variables for the script
         echo "Running DietPi conversion..."
-        sudo chroot /mnt/dietpi /bin/bash -c "export HW_MODEL=${{ inputs.hw_model }} && export DISTRO_TARGET=${{ inputs.distro_target }} && /tmp/dietpi-automation.sh" || true
+        sudo chroot /mnt/dietpi /bin/bash -c "export PATH=/usr/local/bin:\$PATH && export HW_MODEL=${{ inputs.hw_model }} && export DISTRO_TARGET=${{ inputs.distro_target }} && /tmp/dietpi-automation.sh" || true
 
         # Cleanup chroot
         sudo rm -f /mnt/dietpi/usr/bin/qemu-arm-static
         sudo rm -f /mnt/dietpi/tmp/dietpi-installer
         sudo rm -f /mnt/dietpi/tmp/dietpi-automation.sh
+        sudo rm -f /mnt/dietpi/usr/local/bin/systemctl
+        sudo rm -f /mnt/dietpi/etc/profile.d/local-bin-path.sh
 
         # Unmount
         sudo umount /mnt/dietpi/sys || true
