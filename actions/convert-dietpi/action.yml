@@ -1,0 +1,146 @@
+name: "Convert to DietPi"
+author: "Yumi"
+description: "Convert Armbian image to DietPi"
+inputs:
+  image_name:
+    description: "Name of the Armbian image artifact to convert"
+    required: true
+  hw_model:
+    description: "DietPi hardware model ID (25 = Generic Allwinner H3)"
+    required: false
+    default: "25"
+  distro_target:
+    description: "Debian version (7=Bookworm, 8=Trixie)"
+    required: false
+    default: "8"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install dependencies
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y qemu-user-static binfmt-support parted kpartx xz-utils
+
+    - name: Download Armbian image artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: ${{ inputs.image_name }}.img.xz
+        path: ./dietpi-work
+
+    - name: Extract image
+      shell: bash
+      run: |
+        cd ./dietpi-work
+        echo "Extracting image..."
+        xz -d -k ${{ inputs.image_name }}.img.xz || unxz -k ${{ inputs.image_name }}.img.xz
+        ls -la
+
+    - name: Mount image and convert to DietPi
+      shell: bash
+      run: |
+        cd ./dietpi-work
+        IMG_FILE="${{ inputs.image_name }}.img"
+
+        echo "Setting up loop device..."
+        sudo losetup -fP "$IMG_FILE"
+        LOOP_DEV=$(sudo losetup -j "$IMG_FILE" | cut -d: -f1)
+        echo "Loop device: $LOOP_DEV"
+
+        # Find root partition (usually p1 or p2)
+        if [ -b "${LOOP_DEV}p2" ]; then
+          ROOT_PART="${LOOP_DEV}p2"
+        else
+          ROOT_PART="${LOOP_DEV}p1"
+        fi
+        echo "Root partition: $ROOT_PART"
+
+        # Mount root filesystem
+        sudo mkdir -p /mnt/dietpi
+        sudo mount "$ROOT_PART" /mnt/dietpi
+
+        # Mount boot if separate
+        if [ -b "${LOOP_DEV}p1" ] && [ "$ROOT_PART" != "${LOOP_DEV}p1" ]; then
+          sudo mkdir -p /mnt/dietpi/boot
+          sudo mount "${LOOP_DEV}p1" /mnt/dietpi/boot
+        fi
+
+        # Setup chroot
+        sudo mount --bind /dev /mnt/dietpi/dev
+        sudo mount --bind /dev/pts /mnt/dietpi/dev/pts
+        sudo mount --bind /proc /mnt/dietpi/proc
+        sudo mount --bind /sys /mnt/dietpi/sys
+
+        # Copy QEMU binary for ARM emulation
+        sudo cp /usr/bin/qemu-arm-static /mnt/dietpi/usr/bin/
+
+        # Download DietPi installer
+        sudo wget -O /mnt/dietpi/tmp/dietpi-installer https://raw.githubusercontent.com/MichaIng/DietPi/master/.build/images/dietpi-installer
+        sudo chmod +x /mnt/dietpi/tmp/dietpi-installer
+
+        # Create automated config
+        sudo tee /mnt/dietpi/tmp/dietpi-automation.sh << 'DIETPI_SCRIPT'
+        #!/bin/bash
+        export GITBRANCH="master"
+        export HW_MODEL="${HW_MODEL:-25}"
+        export WIFI_REQUIRED=1
+        export DISTRO_TARGET="${DISTRO_TARGET:-8}"
+        export IMAGE_CREATOR="Yumi"
+        export PREIMAGE_INFO="Armbian"
+
+        # Run DietPi installer
+        /tmp/dietpi-installer
+        DIETPI_SCRIPT
+
+        sudo chmod +x /mnt/dietpi/tmp/dietpi-automation.sh
+
+        # Set environment variables for the script
+        echo "Running DietPi conversion..."
+        sudo chroot /mnt/dietpi /bin/bash -c "export HW_MODEL=${{ inputs.hw_model }} && export DISTRO_TARGET=${{ inputs.distro_target }} && /tmp/dietpi-automation.sh" || true
+
+        # Cleanup chroot
+        sudo rm -f /mnt/dietpi/usr/bin/qemu-arm-static
+        sudo rm -f /mnt/dietpi/tmp/dietpi-installer
+        sudo rm -f /mnt/dietpi/tmp/dietpi-automation.sh
+
+        # Unmount
+        sudo umount /mnt/dietpi/sys || true
+        sudo umount /mnt/dietpi/proc || true
+        sudo umount /mnt/dietpi/dev/pts || true
+        sudo umount /mnt/dietpi/dev || true
+        sudo umount /mnt/dietpi/boot || true
+        sudo umount /mnt/dietpi || true
+
+        # Detach loop device
+        sudo losetup -d "$LOOP_DEV"
+
+        echo "DietPi conversion completed!"
+
+    - name: Rename and compress DietPi image
+      shell: bash
+      run: |
+        cd ./dietpi-work
+        DIETPI_NAME=$(echo "${{ inputs.image_name }}" | sed 's/armbian/dietpi/gi')
+        mv "${{ inputs.image_name }}.img" "${DIETPI_NAME}.img"
+
+        echo "Compressing DietPi image..."
+        xz -efkvzT0 "${DIETPI_NAME}.img"
+
+        echo "Calculating checksum..."
+        sha256sum "${DIETPI_NAME}.img.xz" > "${DIETPI_NAME}.img.xz.sha256"
+
+        echo "DIETPI_IMAGE_NAME=${DIETPI_NAME}" >> $GITHUB_ENV
+        ls -la
+
+    - name: Upload DietPi image
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.DIETPI_IMAGE_NAME }}.img.xz
+        path: ./dietpi-work/${{ env.DIETPI_IMAGE_NAME }}.img.xz
+
+    - name: Upload DietPi checksum
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.DIETPI_IMAGE_NAME }}.img.xz.sha256
+        path: ./dietpi-work/${{ env.DIETPI_IMAGE_NAME }}.img.xz.sha256
