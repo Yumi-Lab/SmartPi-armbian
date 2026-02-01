@@ -72,6 +72,9 @@ runs:
         sudo mount --bind /proc /mnt/dietpi/proc
         sudo mount --bind /sys /mnt/dietpi/sys
 
+        # Copy DNS configuration for network access in chroot
+        sudo cp /etc/resolv.conf /mnt/dietpi/etc/resolv.conf
+
         # Copy QEMU binary for ARM emulation
         sudo cp /usr/bin/qemu-arm-static /mnt/dietpi/usr/bin/
 
@@ -121,7 +124,8 @@ runs:
       shell: bash
       run: |
         cd ./dietpi-work
-        DIETPI_NAME=$(echo "${{ inputs.image_name }}" | sed 's/armbian/dietpi/gi')
+        # Replace Yumi with DietPi in the image name
+        DIETPI_NAME=$(echo "${{ inputs.image_name }}" | sed 's/^Yumi-/DietPi-/')
         mv "${{ inputs.image_name }}.img" "${DIETPI_NAME}.img"
 
         echo "Compressing DietPi image..."
