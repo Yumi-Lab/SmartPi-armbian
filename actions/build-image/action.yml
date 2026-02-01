@@ -11,6 +11,9 @@ runs:
   steps:
     #- name: Runner prepare
     #  uses: ./actions/runner-prepare
+    - name: Setup QEMU for cross-compilation
+      uses: docker/setup-qemu-action@v3
+
     - name: Free Github Runner
       uses: descriptinc/free-disk-space@main
       with:
