@@ -1,0 +1,43 @@
+# ============================================================
+# SmartPi Configuration File
+# ============================================================
+# To apply custom settings:
+# 1. Edit the values below
+# 2. Change APPLY_CONFIG=0 to APPLY_CONFIG=1
+# 3. Save the file and boot your device
+#
+# After applying, this file will be renamed to .done
+# ============================================================
+
+# SET TO 1 TO APPLY THIS CONFIGURATION
+APPLY_CONFIG=0
+
+# ============ HOSTNAME ============
+HOSTNAME=
+
+# ============ SSH ============
+# SSH is enabled by default (1=enabled, 0=disabled)
+SSH_ENABLED=1
+
+# ============ WIFI ============
+WIFI_SSID=
+WIFI_PASSWORD=
+WIFI_COUNTRY=FR
+
+# ============ NETWORK ============
+# Leave empty for DHCP (automatic IP)
+STATIC_IP=
+NETMASK=255.255.255.0
+GATEWAY=
+DNS=
+
+# ============ TIMEZONE ============
+# Examples: Europe/Paris, America/New_York, Asia/Tokyo
+TIMEZONE=
+
+# ============ LOCALE ============
+# Examples: fr_FR.UTF-8, en_US.UTF-8
+LOCALE=
+
+# ============ ROOT PASSWORD ============
+ROOT_PASSWORD=

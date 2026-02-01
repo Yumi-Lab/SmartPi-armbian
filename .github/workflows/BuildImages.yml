@@ -128,6 +128,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Bullseye (Debian 11) - distro_target: 6
+          - configfile: smartpad-bullseye-server
+            distro_target: "6"
+          - configfile: smartpi1-bullseye-server
+            distro_target: "6"
           # Bookworm (Debian 12) - distro_target: 7
           - configfile: smartpad-bookworm-server
             distro_target: "7"

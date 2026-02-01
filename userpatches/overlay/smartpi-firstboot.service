@@ -1,0 +1,14 @@
+[Unit]
+Description=SmartPi First Boot Configuration
+After=local-fs.target
+Before=network-pre.target
+Wants=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/smartpi-firstboot.sh
+RemainAfterExit=yes
+StandardOutput=journal+console
+
+[Install]
+WantedBy=multi-user.target

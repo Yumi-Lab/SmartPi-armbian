@@ -21,6 +21,9 @@ BOARD=$3
 BUILD_DESKTOP=$4
 
 Main() {
+    # Install first-boot configuration system for all boards
+    installFirstBootConfig
+
     case "${BOARD}" in
         smartpad)
             rotateConsole
@@ -110,5 +113,42 @@ installScreensaverSetup() {
     echo "Install screensaver configuration ... [DONE]"
 }
 
+
+installFirstBootConfig() {
+    echo "Installing SmartPi first-boot configuration system ..."
+
+    # Install the config template to /boot
+    local configSrc="/tmp/overlay/smartpi-config.txt"
+    local configDest="/boot/smartpi-config.txt"
+    if [[ -f "${configSrc}" ]]; then
+        cp -v "${configSrc}" "${configDest}"
+        # Set default hostname in config based on board name
+        sed -i "s/^HOSTNAME=.*/HOSTNAME=${BOARD}/" "${configDest}"
+        chmod 644 "${configDest}"
+        echo "Config template installed to ${configDest} with HOSTNAME=${BOARD}"
+    fi
+
+    # Install the first-boot script
+    local scriptSrc="/tmp/overlay/smartpi-firstboot.sh"
+    local scriptDest="/usr/local/bin/smartpi-firstboot.sh"
+    if [[ -f "${scriptSrc}" ]]; then
+        cp -v "${scriptSrc}" "${scriptDest}"
+        chmod 755 "${scriptDest}"
+        echo "First-boot script installed to ${scriptDest}"
+    fi
+
+    # Install the systemd service
+    local serviceSrc="/tmp/overlay/smartpi-firstboot.service"
+    local serviceDest="/etc/systemd/system/smartpi-firstboot.service"
+    if [[ -f "${serviceSrc}" ]]; then
+        cp -v "${serviceSrc}" "${serviceDest}"
+        chmod 644 "${serviceDest}"
+        # Enable the service
+        systemctl enable smartpi-firstboot.service
+        echo "First-boot service installed and enabled"
+    fi
+
+    echo "SmartPi first-boot configuration system ... [DONE]"
+}
 
 Main "$@"

@@ -226,8 +226,16 @@ runs:
       shell: bash
       run: |
         cd ./dietpi-work
-        # Replace Yumi with DietPi in the image name
-        DIETPI_NAME=$(echo "${{ inputs.image_name }}" | sed 's/^Yumi-/DietPi-/')
+        # Transform Yumi-smartpi1-bookworm-server -> smartpi1-DietPi-bookworm-debian12-server
+        # Extract board name (smartpi1 or smartpad)
+        BOARD=$(echo "${{ inputs.image_name }}" | sed 's/^Yumi-\([^-]*\)-.*/\1/')
+        # Extract the rest (codename-type-date)
+        REST=$(echo "${{ inputs.image_name }}" | sed 's/^Yumi-[^-]*-//')
+        # Build new name: board-DietPi-rest
+        DIETPI_NAME="${BOARD}-DietPi-${REST}"
+        # Add Debian version number after codename
+        DIETPI_NAME=$(echo "${DIETPI_NAME}" | sed -e 's/bookworm/bookworm-debian12/' -e 's/trixie/trixie-debian13/' -e 's/bullseye/bullseye-debian11/')
+        echo "Renaming to: ${DIETPI_NAME}"
         mv "${{ inputs.image_name }}.img" "${DIETPI_NAME}.img"
 
         echo "Compressing DietPi image..."
