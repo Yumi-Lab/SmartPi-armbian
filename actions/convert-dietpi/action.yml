@@ -238,8 +238,8 @@ runs:
         if [[ ! -f /mnt/dietpi/boot/dietpi/.install_stage ]]; then
             echo "WARNING: Install stage file not found, creating it..."
             sudo mkdir -p /mnt/dietpi/boot/dietpi
-            # Stage 2 = first run setup needed (normal for fresh image)
-            echo "2" | sudo tee /mnt/dietpi/boot/dietpi/.install_stage
+            # Stage -1 = first run setup pending (correct value for fresh image)
+            echo "-1" | sudo tee /mnt/dietpi/boot/dietpi/.install_stage
         fi
 
         # Verify DietPi files exist
