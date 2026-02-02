@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=SmartPad Rotation
+Comment=Rotate display and touch for SmartPad
+Exec=/usr/local/bin/smartpad-rotate.sh
+Terminal=false
+Hidden=false
+X-GNOME-Autostart-enabled=true
+X-MATE-Autostart-enabled=true
+X-KDE-autostart-after=panel

@@ -80,6 +80,15 @@ jobs:
           img_name="${VENDOR}"
           img_name="${img_name}-${{ matrix.configfile }}"
           img_name="${img_name}-${{ needs.setup.outputs.time }}"
+          # Add Debian/Ubuntu version after codename
+          # Debian: bullseye->debian11, bookworm->debian12, trixie->debian13
+          # Ubuntu: jammy->ubuntu22.04, noble->ubuntu24.04
+          img_name=$(echo "${img_name}" | sed \
+            -e 's/bullseye-/bullseye-debian11-/' \
+            -e 's/bookworm-/bookworm-debian12-/' \
+            -e 's/trixie-/trixie-debian13-/' \
+            -e 's/jammy-/jammy-ubuntu22.04-/' \
+            -e 's/noble-/noble-ubuntu24.04-/')
           echo "image_name=${img_name}" >> $GITHUB_OUTPUT
           echo "::group::Image name"
           echo "Image name: ${img_name}"
@@ -128,17 +137,19 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Bullseye (Debian 11) - distro_target: 6
+          # NOTE: DietPi v10+ requires Debian 12 minimum
+          # Bullseye (Debian 11) - NO LONGER SUPPORTED by DietPi v10
+          # Keeping for legacy but may not work with latest dietpi-installer
           - configfile: smartpad-bullseye-server
             distro_target: "6"
           - configfile: smartpi1-bullseye-server
             distro_target: "6"
-          # Bookworm (Debian 12) - distro_target: 7
+          # Bookworm (Debian 12) - distro_target: 7 (oldstable)
           - configfile: smartpad-bookworm-server
             distro_target: "7"
           - configfile: smartpi1-bookworm-server
             distro_target: "7"
-          # Trixie (Debian 13) - distro_target: 8
+          # Trixie (Debian 13) - distro_target: 8 (stable)
           - configfile: smartpad-trixie-server
             distro_target: "8"
           - configfile: smartpi1-trixie-server
@@ -156,6 +167,11 @@ jobs:
         run: |
           source ./build-configs/configs/config-default.conf
           img_name="${VENDOR}-${{ matrix.configfile }}-${{ needs.setup.outputs.time }}"
+          # Add Debian version after codename (same mapping as build job)
+          img_name=$(echo "${img_name}" | sed \
+            -e 's/bullseye-/bullseye-debian11-/' \
+            -e 's/bookworm-/bookworm-debian12-/' \
+            -e 's/trixie-/trixie-debian13-/')
           echo "image_name=${img_name}" >> $GITHUB_OUTPUT
 
       - name: Enable QEMU for ARM

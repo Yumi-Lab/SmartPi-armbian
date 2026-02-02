@@ -30,14 +30,12 @@ Main() {
             rotateScreen
             rotateTouch
             disableDPMS
+            installRotationScript
             if [[ "${BUILD_DESKTOP}" = "yes" ]]; then
                 patchLightdm
                 copyOnboardConf
                 patchOnboardAutostart
                 installScreensaverSetup
-            fi
-            if [[ "${RELEASE}" = "bookworm" ]]; then
-                echo "release bookworm"
             fi
             ;;
     esac
@@ -80,6 +78,42 @@ disableDPMS() {
     echo "DEBUG:"
     ls -l "${dest}"
     echo "Disable DPMS power management ... [DONE]"
+}
+
+installRotationScript() {
+    # Install xrandr-based rotation script for Debian 12/13 compatibility
+    echo "Installing SmartPad rotation script ..."
+
+    # Install the rotation script
+    local scriptSrc="/tmp/overlay/smartpad-rotate.sh"
+    local scriptDest="/usr/local/bin/smartpad-rotate.sh"
+    if [[ -f "${scriptSrc}" ]]; then
+        cp -v "${scriptSrc}" "${scriptDest}"
+        chmod 755 "${scriptDest}"
+        echo "Rotation script installed to ${scriptDest}"
+    fi
+
+    # Install autostart desktop file
+    local desktopSrc="/tmp/overlay/smartpad-rotate.desktop"
+    local desktopDest="/etc/xdg/autostart/smartpad-rotate.desktop"
+    if [[ -f "${desktopSrc}" ]]; then
+        mkdir -p /etc/xdg/autostart
+        cp -v "${desktopSrc}" "${desktopDest}"
+        chmod 644 "${desktopDest}"
+        echo "Rotation autostart installed"
+    fi
+
+    # Also add to LightDM session setup for login screen rotation
+    local lightdmScript="/etc/lightdm/lightdm.conf.d/50-smartpad-rotate.conf"
+    mkdir -p /etc/lightdm/lightdm.conf.d
+    cat > "${lightdmScript}" << 'EOF'
+[Seat:*]
+display-setup-script=/usr/local/bin/smartpad-rotate.sh
+EOF
+    chmod 644 "${lightdmScript}"
+    echo "LightDM rotation configured"
+
+    echo "SmartPad rotation script ... [DONE]"
 }
 
 patchLightdm() {
