@@ -12,12 +12,12 @@
 # After applying, this file will be renamed to .done
 #
 # RASPBERRY PI IMAGER COMPATIBILITY:
-# This system also supports Raspberry Pi Imager files:
-# - ssh or ssh.txt (empty file to enable SSH)
-# - wpa_supplicant.conf (WiFi config)
-# - userconf.txt (user:password_hash)
-# - hostname (plain text hostname)
-# - firstrun.sh (custom script)
+# This system fully supports Raspberry Pi Imager configuration!
+# Just use the gear icon in Pi Imager to set hostname, WiFi, SSH, etc.
+#
+# Supported formats:
+# - Cloud-init style (new): user-data, network-*.con, cmdline.txt
+# - Legacy files: ssh, wpa_supplicant.conf, userconf.txt, hostname, firstrun.sh
 # ============================================================
 
 # SET TO 1 TO APPLY THIS CONFIGURATION

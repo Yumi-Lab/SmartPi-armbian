@@ -1,10 +1,17 @@
+<p align="center">
+  <a href="https://www.yumi-lab.com">
+    <img src="assets/logo_yumi.png" alt="Yumi Lab" width="200"/>
+  </a>
+</p>
+
 # SmartPi-armbian
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Version](https://img.shields.io/badge/Version-1.5.4-green.svg)](https://github.com/Yumi-Lab/SmartPi-armbian/releases)
 [![Build Images](https://github.com/Yumi-Lab/SmartPi-armbian/actions/workflows/BuildImages.yml/badge.svg)](https://github.com/Yumi-Lab/SmartPi-armbian/actions/workflows/BuildImages.yml)
+[![Wiki](https://img.shields.io/badge/Wiki-Documentation-orange?logo=gitbook&logoColor=white)](https://wiki.yumi-lab.com)
 
-Custom Armbian image builder for SmartPi devices by **Yumi Lab**.
+Custom Armbian image builder for SmartPi devices by **[Yumi Lab](https://www.yumi-lab.com)**.
 
 ## Table of Contents
 
@@ -68,7 +75,7 @@ SmartPi-armbian is a custom image builder for SmartPi devices, leveraging the Ar
 | ![Noble](https://img.shields.io/badge/Noble-24.04_LTS-E95420?logo=ubuntu&logoColor=white) | Ubuntu 24.04 | ❌ No | **Current LTS** |
 
 ### DietPi
-![DietPi](https://img.shields.io/badge/DietPi-5A9817?style=for-the-badge&logo=linux&logoColor=white)
+<img src="assets/dietpi-logo.png" alt="DietPi" height="40"/>
 
 DietPi conversion is available for **Debian server images only**.
 
@@ -133,19 +140,25 @@ WIFI_COUNTRY=FR
 TIMEZONE=Europe/Paris
 ```
 
-### Method 2: Raspberry Pi Imager Compatible
+### Method 2: Raspberry Pi Imager (Recommended for beginners)
 
-You can also use **Raspberry Pi Imager** files directly on the boot partition:
+**Use Raspberry Pi Imager's built-in configuration!** Click the ⚙️ gear icon to set:
+- Hostname
+- Username & password
+- WiFi network
+- SSH access
+- Locale settings
 
-| File | Description |
-|------|-------------|
-| `ssh` or `ssh.txt` | Empty file to enable SSH |
-| `wpa_supplicant.conf` | Standard WiFi configuration |
-| `userconf.txt` | User creation (`user:encrypted_password`) |
-| `hostname` | Plain text hostname |
-| `firstrun.sh` | Custom script executed on first boot |
+These settings are automatically applied on first boot.
 
-This means you can use tools like **Raspberry Pi Imager** to pre-configure WiFi and SSH, then flash a SmartPi image!
+#### Supported Configuration Formats
+
+| Format | Files | Description |
+|--------|-------|-------------|
+| **Cloud-init** (new) | `user-data`, `network-*.con` | Native RPi Imager format |
+| **Legacy** | `ssh`, `wpa_supplicant.conf`, `userconf.txt` | Traditional files |
+
+This means you can use **Raspberry Pi Imager** to pre-configure everything, then flash a SmartPi image!
 
 ### How It Works
 
@@ -284,12 +297,30 @@ Please note that while the original work is open-source and licensed under the G
 
 ## Contact
 
-- **Issues:** Open an issue on the [GitHub repository](https://github.com/Yumi-Lab/SmartPi-armbian/issues)
-- **Website:** [Yumi Lab](https://www.yumi-lab.com)
+- **Wiki:** [wiki.yumi-lab.com](https://wiki.yumi-lab.com) - Full documentation and tutorials
+- **Website:** [yumi-lab.com](https://www.yumi-lab.com) - Official Yumi Lab website
+- **Issues:** [GitHub Issues](https://github.com/Yumi-Lab/SmartPi-armbian/issues) - Report bugs or request features
 
 ---
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Built_with-Armbian-red?style=for-the-badge&logo=linux&logoColor=white" alt="Armbian"/>
-  <img src="https://img.shields.io/badge/Made_by-Yumi_Lab-blue?style=for-the-badge" alt="Yumi Lab"/>
+  <b>Built with</b>
+</p>
+<p align="center">
+  <a href="https://www.armbian.com">
+    <img src="assets/armbian-logo.png" alt="Armbian" height="50"/>
+  </a>
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <a href="https://dietpi.com">
+    <img src="assets/dietpi-logo.png" alt="DietPi" height="50"/>
+  </a>
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <a href="https://www.yumi-lab.com">
+    <img src="assets/logo_yumi.png" alt="Yumi Lab" height="50"/>
+  </a>
+</p>
+<p align="center">
+  <a href="https://wiki.yumi-lab.com">
+    <img src="https://img.shields.io/badge/Docs-Wiki-orange?style=for-the-badge&logo=gitbook&logoColor=white" alt="Wiki"/>
+  </a>
 </p>

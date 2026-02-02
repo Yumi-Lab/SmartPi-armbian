@@ -4,11 +4,15 @@
 #
 # Supported configuration methods:
 # 1. SmartPi native: /boot/smartpi-config.txt (with APPLY_CONFIG=1)
-# 2. Raspberry Pi Imager compatible files:
+# 2. Raspberry Pi Imager compatible files (legacy):
 #    - /boot/ssh or /boot/ssh.txt (enable SSH)
 #    - /boot/wpa_supplicant.conf (WiFi configuration)
 #    - /boot/userconf.txt (user:encrypted_password)
 #    - /boot/firstrun.sh (custom script from Pi Imager)
+# 3. Raspberry Pi Imager cloud-init style (for custom images):
+#    - /boot/user-data (cloud-init YAML with hostname, users, packages)
+#    - /boot/network-*.con (NetworkManager WiFi configuration)
+#    - /boot/cmdline.txt (WiFi country code)
 
 BOOT_DIR="/boot"
 LOG_FILE="/var/log/smartpi-firstboot.log"
@@ -122,6 +126,217 @@ process_rpi_hostname() {
             fi
         fi
         rm -f "$hostname_file"
+        return 0
+    fi
+    return 1
+}
+
+# ============================================================
+# RASPBERRY PI IMAGER CLOUD-INIT STYLE FILES
+# For custom images, RPi Imager creates these files
+# ============================================================
+
+process_cloudinit_userdata() {
+    # Raspberry Pi Imager creates user-data in cloud-init YAML format
+    local userdata="${BOOT_DIR}/user-data"
+
+    if [[ ! -f "$userdata" ]]; then
+        return 1
+    fi
+
+    log "[CLOUD-INIT] Found user-data file, processing..."
+
+    # Extract hostname
+    local hostname=$(grep -E "^hostname:" "$userdata" | sed 's/hostname:[[:space:]]*//' | tr -d '"')
+    if [[ -n "$hostname" ]]; then
+        log "[CLOUD-INIT] Setting hostname to: $hostname"
+        hostnamectl set-hostname "$hostname" 2>/dev/null
+        echo "$hostname" > /etc/hostname
+        sed -i "s/127.0.1.1.*/127.0.1.1\t$hostname/" /etc/hosts
+        if ! grep -q "127.0.1.1" /etc/hosts; then
+            echo "127.0.1.1	$hostname" >> /etc/hosts
+        fi
+    fi
+
+    # Extract user info (simple YAML parsing)
+    # Format: users: - name: username ... passwd: hash
+    local username=$(grep -A20 "^users:" "$userdata" | grep -E "^-?\s*name:" | head -1 | sed 's/.*name:[[:space:]]*//' | tr -d '"')
+    local passwd_hash=$(grep -A20 "^users:" "$userdata" | grep -E "^\s*passwd:" | head -1 | sed 's/.*passwd:[[:space:]]*//' | tr -d '"')
+
+    if [[ -n "$username" ]]; then
+        log "[CLOUD-INIT] Found user configuration for: $username"
+
+        # Create user if not exists
+        if ! id "$username" &>/dev/null; then
+            log "[CLOUD-INIT] Creating user: $username"
+            useradd -m -s /bin/bash "$username" 2>/dev/null
+        fi
+
+        # Add user to groups (extract from user-data or use defaults)
+        local groups=$(grep -A20 "^users:" "$userdata" | grep -E "^\s*groups:" | head -1 | sed 's/.*groups:[[:space:]]*//' | tr -d '"')
+        if [[ -n "$groups" ]]; then
+            log "[CLOUD-INIT] Adding $username to groups: $groups"
+            usermod -aG "$groups" "$username" 2>/dev/null
+        else
+            # Default groups for sudo access
+            usermod -aG sudo,users "$username" 2>/dev/null
+        fi
+
+        # Set password if provided (already hashed)
+        if [[ -n "$passwd_hash" ]]; then
+            log "[CLOUD-INIT] Setting password for $username"
+            echo "${username}:${passwd_hash}" | chpasswd -e
+        fi
+    fi
+
+    # Check ssh_pwauth setting
+    if grep -q "ssh_pwauth:[[:space:]]*true" "$userdata"; then
+        log "[CLOUD-INIT] Enabling SSH password authentication"
+        sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config 2>/dev/null
+        systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null
+    fi
+
+    # Install packages if specified
+    local in_packages=false
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^packages: ]]; then
+            in_packages=true
+            continue
+        fi
+        if [[ "$in_packages" == true ]]; then
+            if [[ "$line" =~ ^[[:space:]]*-[[:space:]]*(.*) ]]; then
+                local pkg="${BASH_REMATCH[1]}"
+                pkg=$(echo "$pkg" | tr -d '"' | tr -d "'")
+                if [[ -n "$pkg" ]]; then
+                    log "[CLOUD-INIT] Installing package: $pkg"
+                    apt-get install -y "$pkg" >> "$LOG_FILE" 2>&1 || log "[CLOUD-INIT] Failed to install $pkg"
+                fi
+            elif [[ ! "$line" =~ ^[[:space:]] ]]; then
+                in_packages=false
+            fi
+        fi
+    done < "$userdata"
+
+    # Rename file to mark as processed
+    mv "$userdata" "${userdata}.done"
+    log "[CLOUD-INIT] user-data processed and renamed to user-data.done"
+
+    return 0
+}
+
+process_cloudinit_network() {
+    # Raspberry Pi Imager creates network-*.con files for WiFi
+    # Format is similar to NetworkManager connection files
+    local found=false
+
+    for netfile in "${BOOT_DIR}"/network-*.con "${BOOT_DIR}"/network-config; do
+        [[ ! -f "$netfile" ]] && continue
+        found=true
+
+        log "[CLOUD-INIT] Found network config: $netfile"
+
+        # Try to extract WiFi SSID and password from the file
+        # Format can be netplan-style YAML or NetworkManager keyfile
+        local ssid=""
+        local psk=""
+
+        # Try netplan/cloud-init style (wifis: wlan0: access-points: "SSID": password: "...")
+        # Format:
+        #   access-points:
+        #     "SSID-NAME":
+        #       password: "xxx"
+        ssid=$(grep -A10 "access-points:" "$netfile" 2>/dev/null | grep -E '^\s+"[^"]+":' | head -1 | sed 's/.*"\([^"]*\)".*/\1/')
+        if [[ -n "$ssid" ]]; then
+            psk=$(grep -A2 "\"$ssid\":" "$netfile" 2>/dev/null | grep "password:" | sed 's/.*password:[[:space:]]*"\{0,1\}\([^"]*\)"\{0,1\}/\1/')
+        fi
+
+        # If not found, try NetworkManager keyfile style
+        if [[ -z "$ssid" ]]; then
+            ssid=$(grep -E "^ssid=" "$netfile" 2>/dev/null | cut -d= -f2)
+            psk=$(grep -E "^psk=" "$netfile" 2>/dev/null | cut -d= -f2)
+        fi
+
+        if [[ -n "$ssid" ]]; then
+            log "[CLOUD-INIT] Configuring WiFi network: $ssid"
+
+            # Unblock WiFi
+            rfkill unblock wifi 2>/dev/null || true
+
+            # Use NetworkManager if available
+            if command -v nmcli &> /dev/null; then
+                # Check if PSK is a hash (64 hex chars) or plaintext
+                if [[ ${#psk} -eq 64 ]] && [[ "$psk" =~ ^[0-9a-fA-F]+$ ]]; then
+                    # PSK is already hashed, create connection file directly
+                    log "[CLOUD-INIT] PSK is pre-hashed, creating NM connection directly"
+                    local nm_file="/etc/NetworkManager/system-connections/${ssid}.nmconnection"
+                    cat > "$nm_file" << EOF
+[connection]
+id=${ssid}
+type=wifi
+autoconnect=true
+
+[wifi]
+ssid=${ssid}
+mode=infrastructure
+
+[wifi-security]
+key-mgmt=wpa-psk
+psk=${psk}
+
+[ipv4]
+method=auto
+
+[ipv6]
+method=auto
+EOF
+                    chmod 600 "$nm_file"
+                    nmcli connection reload 2>/dev/null
+                else
+                    # Plaintext password, use nmcli
+                    nmcli dev wifi connect "$ssid" password "$psk" 2>/dev/null || \
+                        log "[CLOUD-INIT] nmcli connect failed, connection file created"
+                fi
+            fi
+        fi
+
+        # Rename file to mark as processed
+        mv "$netfile" "${netfile}.done"
+        log "[CLOUD-INIT] Network config processed"
+    done
+
+    [[ "$found" == true ]] && return 0
+    return 1
+}
+
+process_cmdline_wifi_country() {
+    # Raspberry Pi Imager adds WiFi country to cmdline.txt
+    # Format: cfg80211.ieee80211_regdom=XX
+    local cmdline="${BOOT_DIR}/cmdline.txt"
+
+    if [[ ! -f "$cmdline" ]]; then
+        return 1
+    fi
+
+    local country=$(grep -oE 'cfg80211\.ieee80211_regdom=[A-Z]{2}' "$cmdline" | cut -d= -f2)
+
+    if [[ -n "$country" ]]; then
+        log "[CLOUD-INIT] Setting WiFi regulatory domain to: $country"
+
+        # Set using iw if available
+        if command -v iw &> /dev/null; then
+            iw reg set "$country" 2>/dev/null || true
+        fi
+
+        # Also set in wpa_supplicant config if it exists
+        if [[ -f /etc/wpa_supplicant/wpa_supplicant.conf ]]; then
+            if ! grep -q "^country=" /etc/wpa_supplicant/wpa_supplicant.conf; then
+                sed -i "1i country=$country" /etc/wpa_supplicant/wpa_supplicant.conf
+            fi
+        fi
+
+        # Create regulatory.db config
+        echo "REGDOMAIN=$country" > /etc/default/crda 2>/dev/null || true
+
         return 0
     fi
     return 1
@@ -292,7 +507,12 @@ main() {
 
     local config_applied=false
 
-    # Process Raspberry Pi Imager compatible files first
+    # Process Raspberry Pi Imager cloud-init style files first (new format)
+    process_cloudinit_userdata && config_applied=true
+    process_cloudinit_network && config_applied=true
+    process_cmdline_wifi_country && config_applied=true
+
+    # Process Raspberry Pi Imager legacy compatible files
     process_rpi_ssh && config_applied=true
     process_rpi_wifi && config_applied=true
     process_rpi_userconf && config_applied=true
