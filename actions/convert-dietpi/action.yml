@@ -266,12 +266,30 @@ runs:
         echo "Forced .install_stage to: $(cat /mnt/dietpi/boot/dietpi/.install_stage)"
 
         # Force .hw_model to correct value (25 = Generic Allwinner H3)
-        # This MUST be just the number, nothing else
-        printf '%s\n' "${{ inputs.hw_model }}" | sudo tee /mnt/dietpi/boot/dietpi/.hw_model > /dev/null
+        # .hw_model is SOURCED by DietPi, so it must be a bash script with variables!
+        HW_MODEL="${{ inputs.hw_model }}"
+        DISTRO_TARGET="${{ inputs.distro_target }}"
+        case "$DISTRO_TARGET" in
+          6) DISTRO_NAME="bullseye" ;;
+          7) DISTRO_NAME="bookworm" ;;
+          8) DISTRO_NAME="trixie" ;;
+          *) DISTRO_NAME="bookworm" ;;
+        esac
+        sudo tee /mnt/dietpi/boot/dietpi/.hw_model > /dev/null << EOFHWMODEL
+        G_HW_MODEL=$HW_MODEL
+        G_HW_MODEL_NAME='Generic Allwinner H3'
+        G_HW_ARCH=2
+        G_HW_ARCH_NAME='armv7l'
+        G_HW_CPUID=0
+        G_HW_CPU_CORES=4
+        G_DISTRO=$DISTRO_TARGET
+        G_DISTRO_NAME='$DISTRO_NAME'
+        G_ROOTFS_DEV='/dev/mmcblk0p1'
+        G_HW_UUID=''
+        EOFHWMODEL
         sudo chmod 644 /mnt/dietpi/boot/dietpi/.hw_model
-        echo "Forced .hw_model to: $(cat /mnt/dietpi/boot/dietpi/.hw_model)"
-        echo "Hex verification:"
-        xxd /mnt/dietpi/boot/dietpi/.hw_model 2>/dev/null || od -c /mnt/dietpi/boot/dietpi/.hw_model
+        echo "Forced .hw_model content:"
+        cat /mnt/dietpi/boot/dietpi/.hw_model
 
         # Create .dietpi-autostart_index if missing (0 = console login)
         if [[ ! -f /mnt/dietpi/boot/dietpi/.dietpi-autostart_index ]]; then

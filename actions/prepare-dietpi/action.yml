@@ -144,7 +144,32 @@ runs:
         echo "Creating DietPi state files..."
         DIETPI_VERSION=$(cat dietpi-repo/.version 2>/dev/null || echo "9.9.0")
 
-        printf '%s' "${{ inputs.hw_model }}" | sudo tee /mnt/dietpi/boot/dietpi/.hw_model > /dev/null
+        # Determine architecture and distro info
+        # HW_MODEL 25 = Generic Allwinner H3 (OrangePi, NanoPi, etc.)
+        HW_MODEL="${{ inputs.hw_model }}"
+        DISTRO_TARGET="${{ inputs.distro_target }}"
+
+        # Map distro target to name
+        case "$DISTRO_TARGET" in
+          6) DISTRO_NAME="bullseye" ;;
+          7) DISTRO_NAME="bookworm" ;;
+          8) DISTRO_NAME="trixie" ;;
+          *) DISTRO_NAME="bookworm" ;;
+        esac
+
+        # Create .hw_model as a sourceable bash file (DietPi expects this format!)
+        sudo tee /mnt/dietpi/boot/dietpi/.hw_model > /dev/null << EOFHWMODEL
+        G_HW_MODEL=$HW_MODEL
+        G_HW_MODEL_NAME='Generic Allwinner H3'
+        G_HW_ARCH=2
+        G_HW_ARCH_NAME='armv7l'
+        G_HW_CPUID=0
+        G_HW_CPU_CORES=4
+        G_DISTRO=$DISTRO_TARGET
+        G_DISTRO_NAME='$DISTRO_NAME'
+        G_ROOTFS_DEV='/dev/mmcblk0p1'
+        G_HW_UUID=''
+        EOFHWMODEL
         sudo chmod 644 /mnt/dietpi/boot/dietpi/.hw_model
 
         printf '%s' "2" | sudo tee /mnt/dietpi/boot/dietpi/.install_stage > /dev/null
