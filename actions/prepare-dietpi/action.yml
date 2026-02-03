@@ -1,6 +1,6 @@
-name: "Prepare DietPi-Ready Image"
+name: "Prepare DietPi-Ready Image (100% Offline)"
 author: "Yumi"
-description: "Prepare Armbian image for DietPi first-boot installation (no QEMU)"
+description: "Prepare Armbian image with full DietPi pre-installed - NO internet needed at first boot"
 inputs:
   image_name:
     description: "Name of the Armbian image artifact to prepare"
@@ -21,7 +21,7 @@ runs:
       shell: bash
       run: |
         sudo apt-get update
-        sudo apt-get install -y parted kpartx xz-utils wget
+        sudo apt-get install -y parted kpartx xz-utils wget git
 
     - name: Download Armbian image artifact
       uses: actions/download-artifact@v4
@@ -37,56 +37,19 @@ runs:
         xz -d -k ${{ inputs.image_name }}.img.xz || unxz -k ${{ inputs.image_name }}.img.xz
         ls -la
 
-    - name: Download DietPi files
+    - name: Clone complete DietPi repository
       shell: bash
       run: |
         cd ./dietpi-work
         echo "========================================"
-        echo "Downloading DietPi files from GitHub"
+        echo "Cloning COMPLETE DietPi repository for 100% offline install"
         echo "========================================"
+        git clone --depth=1 https://github.com/MichaIng/DietPi.git dietpi-repo
+        echo "DietPi repository cloned"
+        echo "Version: $(cat dietpi-repo/.version 2>/dev/null || echo 'unknown')"
+        ls -la dietpi-repo/
 
-        # Create temp directory for DietPi files
-        mkdir -p dietpi-files/boot/dietpi
-        mkdir -p dietpi-files/boot/dietpi/func
-
-        # Download main DietPi boot files
-        DIETPI_REPO="https://raw.githubusercontent.com/MichaIng/DietPi/master"
-
-        echo "Downloading dietpi.txt..."
-        wget -q -O dietpi-files/boot/dietpi.txt "${DIETPI_REPO}/dietpi.txt"
-
-        echo "Downloading dietpi-globals..."
-        wget -q -O dietpi-files/boot/dietpi/dietpi-globals "${DIETPI_REPO}/dietpi/dietpi-globals"
-
-        echo "Downloading func scripts..."
-        wget -q -O dietpi-files/boot/dietpi/func/dietpi-banner "${DIETPI_REPO}/dietpi/func/dietpi-banner"
-        wget -q -O dietpi-files/boot/dietpi/func/dietpi-firstboot "${DIETPI_REPO}/dietpi/func/dietpi-firstboot"
-        wget -q -O dietpi-files/boot/dietpi/func/dietpi-login "${DIETPI_REPO}/dietpi/func/dietpi-login"
-        wget -q -O dietpi-files/boot/dietpi/func/dietpi-postboot "${DIETPI_REPO}/dietpi/func/dietpi-postboot"
-        wget -q -O dietpi-files/boot/dietpi/func/dietpi-preboot "${DIETPI_REPO}/dietpi/func/dietpi-preboot"
-        wget -q -O dietpi-files/boot/dietpi/func/dietpi-notify "${DIETPI_REPO}/dietpi/func/dietpi-notify"
-        wget -q -O dietpi-files/boot/dietpi/func/dietpi-obtain_hw_model "${DIETPI_REPO}/dietpi/func/dietpi-obtain_hw_model"
-        wget -q -O dietpi-files/boot/dietpi/func/dietpi-set_software "${DIETPI_REPO}/dietpi/func/dietpi-set_software"
-        wget -q -O dietpi-files/boot/dietpi/func/dietpi-ramdisk "${DIETPI_REPO}/dietpi/func/dietpi-ramdisk"
-
-        echo "Downloading main dietpi scripts..."
-        wget -q -O dietpi-files/boot/dietpi/dietpi-software "${DIETPI_REPO}/dietpi/dietpi-software"
-        wget -q -O dietpi-files/boot/dietpi/dietpi-config "${DIETPI_REPO}/dietpi/dietpi-config"
-        wget -q -O dietpi-files/boot/dietpi/dietpi-update "${DIETPI_REPO}/dietpi/dietpi-update"
-        wget -q -O dietpi-files/boot/dietpi/dietpi-autostart "${DIETPI_REPO}/dietpi/dietpi-autostart"
-        wget -q -O dietpi-files/boot/dietpi/dietpi-services "${DIETPI_REPO}/dietpi/dietpi-services"
-        wget -q -O dietpi-files/boot/dietpi/dietpi-drive_manager "${DIETPI_REPO}/dietpi/dietpi-drive_manager"
-        wget -q -O dietpi-files/boot/dietpi/dietpi-cron "${DIETPI_REPO}/dietpi/dietpi-cron"
-        wget -q -O dietpi-files/boot/dietpi/dietpi-cleaner "${DIETPI_REPO}/dietpi/dietpi-cleaner"
-
-        # Download the installer script (will run on first boot)
-        echo "Downloading dietpi-installer..."
-        wget -q -O dietpi-files/dietpi-installer "${DIETPI_REPO}/.build/images/dietpi-installer"
-
-        echo "DietPi files downloaded successfully"
-        ls -laR dietpi-files/
-
-    - name: Mount image and prepare DietPi
+    - name: Mount image and install DietPi (100% Offline)
       shell: bash
       run: |
         set -e
@@ -94,7 +57,7 @@ runs:
         IMG_FILE="${{ inputs.image_name }}.img"
 
         echo "========================================"
-        echo "Preparing DietPi-Ready Image"
+        echo "Installing DietPi (100% OFFLINE)"
         echo "HW_MODEL: ${{ inputs.hw_model }}"
         echo "DISTRO_TARGET: ${{ inputs.distro_target }}"
         echo "========================================"
@@ -104,7 +67,7 @@ runs:
         LOOP_DEV=$(sudo losetup -j "$IMG_FILE" | cut -d: -f1)
         echo "Loop device: $LOOP_DEV"
 
-        # Find root partition (usually p1 or p2)
+        # Find root partition
         if [ -b "${LOOP_DEV}p2" ]; then
           ROOT_PART="${LOOP_DEV}p2"
           BOOT_PART="${LOOP_DEV}p1"
@@ -113,192 +76,195 @@ runs:
           BOOT_PART=""
         fi
         echo "Root partition: $ROOT_PART"
-        echo "Boot partition: $BOOT_PART"
 
-        # Mount root filesystem
+        # Mount filesystems
         sudo mkdir -p /mnt/dietpi
         sudo mount "$ROOT_PART" /mnt/dietpi
-
-        # Mount boot if separate
         if [ -n "$BOOT_PART" ]; then
           sudo mkdir -p /mnt/dietpi/boot
           sudo mount "$BOOT_PART" /mnt/dietpi/boot
         fi
 
-        # ========================================
-        # Copy DietPi files to image
-        # ========================================
-        echo "Copying DietPi files to image..."
-
-        # Copy boot files
-        sudo cp -r dietpi-files/boot/* /mnt/dietpi/boot/
-
-        # Make scripts executable
-        sudo chmod +x /mnt/dietpi/boot/dietpi/func/*
-        sudo chmod +x /mnt/dietpi/boot/dietpi/dietpi-*
-
-        # Copy installer to /root
-        sudo cp dietpi-files/dietpi-installer /mnt/dietpi/root/dietpi-installer
-        sudo chmod +x /mnt/dietpi/root/dietpi-installer
-
-        # ========================================
-        # Create DietPi state files
-        # ========================================
-        echo "Creating DietPi state files..."
+        # Create all DietPi directories
+        echo "Creating DietPi directory structure..."
         sudo mkdir -p /mnt/dietpi/boot/dietpi
+        sudo mkdir -p /mnt/dietpi/boot/dietpi/func
+        sudo mkdir -p /mnt/dietpi/boot/dietpi/.hw_model.d
+        sudo mkdir -p /mnt/dietpi/etc/bashrc.d
+        sudo mkdir -p /mnt/dietpi/usr/local/sbin
+        sudo mkdir -p /mnt/dietpi/var/lib/dietpi
+        sudo mkdir -p /mnt/dietpi/var/lib/dietpi/dietpi-software
+        sudo mkdir -p /mnt/dietpi/var/lib/dietpi/dietpi-software/installed
+        sudo mkdir -p /mnt/dietpi/var/tmp/dietpi/logs
+        sudo mkdir -p /mnt/dietpi/var/log/dietpi
 
-        # .hw_model - Hardware model ID
-        printf '%s\n' "${{ inputs.hw_model }}" | sudo tee /mnt/dietpi/boot/dietpi/.hw_model > /dev/null
+        # Copy ALL DietPi files from repo
+        echo "Installing ALL DietPi files..."
+        sudo cp dietpi-repo/dietpi.txt /mnt/dietpi/boot/
+        echo "Copying /boot/dietpi scripts..."
+        sudo cp -r dietpi-repo/dietpi/* /mnt/dietpi/boot/dietpi/
+        echo "Copying func scripts..."
+        if [[ -d dietpi-repo/dietpi/func ]]; then
+          sudo cp -r dietpi-repo/dietpi/func/* /mnt/dietpi/boot/dietpi/func/
+        fi
+        sudo chmod +x /mnt/dietpi/boot/dietpi/dietpi-* 2>/dev/null || true
+        sudo chmod +x /mnt/dietpi/boot/dietpi/func/* 2>/dev/null || true
+
+        # Install DietPi commands to /usr/local/sbin
+        echo "Installing DietPi commands to /usr/local/sbin..."
+        for script in dietpi-repo/dietpi/dietpi-*; do
+          if [[ -f "$script" ]]; then
+            name=$(basename "$script")
+            sudo cp "$script" "/mnt/dietpi/usr/local/sbin/$name"
+            sudo chmod +x "/mnt/dietpi/usr/local/sbin/$name"
+          fi
+        done
+
+        if [[ -f dietpi-repo/dietpi/dietpi-globals ]]; then
+          sudo cp dietpi-repo/dietpi/dietpi-globals /mnt/dietpi/boot/dietpi/
+          sudo chmod +x /mnt/dietpi/boot/dietpi/dietpi-globals
+        fi
+
+        # Install shell integration
+        echo "Installing shell integration..."
+        if [[ -f dietpi-repo/.bashrc ]]; then
+          sudo cp dietpi-repo/.bashrc /mnt/dietpi/root/.bashrc.dietpi
+        fi
+
+        # Create dietpi.bash for bash integration
+        sudo tee /mnt/dietpi/etc/bashrc.d/dietpi.bash > /dev/null << 'EOFBASH'
+        # DietPi bash integration
+        test -f /boot/dietpi/.hw_model && export G_HW_MODEL=$(cat /boot/dietpi/.hw_model)
+        test -f /boot/dietpi/.install_stage && export G_DIETPI_INSTALL_STAGE=$(cat /boot/dietpi/.install_stage)
+        test -f /boot/dietpi/dietpi-globals && . /boot/dietpi/dietpi-globals
+        EOFBASH
+        sudo chmod 644 /mnt/dietpi/etc/bashrc.d/dietpi.bash
+
+        # Create DietPi state files
+        echo "Creating DietPi state files..."
+        DIETPI_VERSION=$(cat dietpi-repo/.version 2>/dev/null || echo "9.9.0")
+
+        printf '%s' "${{ inputs.hw_model }}" | sudo tee /mnt/dietpi/boot/dietpi/.hw_model > /dev/null
         sudo chmod 644 /mnt/dietpi/boot/dietpi/.hw_model
-        echo "Created .hw_model = ${{ inputs.hw_model }}"
 
-        # .install_stage - Stage -1 = first run setup pending
-        printf '%s\n' "-1" | sudo tee /mnt/dietpi/boot/dietpi/.install_stage > /dev/null
+        printf '%s' "2" | sudo tee /mnt/dietpi/boot/dietpi/.install_stage > /dev/null
         sudo chmod 644 /mnt/dietpi/boot/dietpi/.install_stage
-        echo "Created .install_stage = -1"
 
-        # .dietpi-autostart_index - 0 = console login
-        printf '%s\n' "0" | sudo tee /mnt/dietpi/boot/dietpi/.dietpi-autostart_index > /dev/null
+        printf '%s' "0" | sudo tee /mnt/dietpi/boot/dietpi/.dietpi-autostart_index > /dev/null
         sudo chmod 644 /mnt/dietpi/boot/dietpi/.dietpi-autostart_index
-        echo "Created .dietpi-autostart_index = 0"
 
-        # .update_stage
-        printf '%s\n' "0" | sudo tee /mnt/dietpi/boot/dietpi/.update_stage > /dev/null
+        printf '%s' "0" | sudo tee /mnt/dietpi/boot/dietpi/.update_stage > /dev/null
         sudo chmod 644 /mnt/dietpi/boot/dietpi/.update_stage
-        echo "Created .update_stage = 0"
 
-        # .version - DietPi version
-        printf '%s\n' "9.9.0" | sudo tee /mnt/dietpi/boot/dietpi/.version > /dev/null
+        printf '%s' "$DIETPI_VERSION" | sudo tee /mnt/dietpi/boot/dietpi/.version > /dev/null
         sudo chmod 644 /mnt/dietpi/boot/dietpi/.version
-        echo "Created .version = 9.9.0"
 
-        # ========================================
-        # Create first-boot service for DietPi
-        # ========================================
-        echo "Creating DietPi first-boot service..."
+        printf '%s' "0" | sudo tee /mnt/dietpi/boot/dietpi/.dietpi-update.check > /dev/null
 
-        cat << 'FIRSTBOOT_SCRIPT' | sudo tee /mnt/dietpi/usr/local/bin/dietpi-firstboot-setup.sh > /dev/null
-#!/bin/bash
-# DietPi First Boot Setup Script
-# This runs on real hardware to complete DietPi installation
+        # Configure dietpi.txt defaults
+        echo "Configuring dietpi.txt..."
+        if [[ -f /mnt/dietpi/boot/dietpi.txt ]]; then
+          sudo sed -i "s/^AUTO_SETUP_NET_WIFI_ENABLED=.*/AUTO_SETUP_NET_WIFI_ENABLED=1/" /mnt/dietpi/boot/dietpi.txt
+          sudo sed -i "s/^AUTO_SETUP_HEADLESS=.*/AUTO_SETUP_HEADLESS=1/" /mnt/dietpi/boot/dietpi.txt
+          sudo sed -i "s/^AUTO_SETUP_LOCALE=.*/AUTO_SETUP_LOCALE=fr_FR.UTF-8/" /mnt/dietpi/boot/dietpi.txt
+          sudo sed -i "s/^AUTO_SETUP_KEYBOARD_LAYOUT=.*/AUTO_SETUP_KEYBOARD_LAYOUT=fr/" /mnt/dietpi/boot/dietpi.txt
+          sudo sed -i "s|^AUTO_SETUP_TIMEZONE=.*|AUTO_SETUP_TIMEZONE=Europe/Paris|" /mnt/dietpi/boot/dietpi.txt
+          sudo sed -i "s/^AUTO_SETUP_AUTOMATED=.*/AUTO_SETUP_AUTOMATED=1/" /mnt/dietpi/boot/dietpi.txt
+          sudo sed -i "s/^AUTO_SETUP_ACCEPT_LICENSE=.*/AUTO_SETUP_ACCEPT_LICENSE=1/" /mnt/dietpi/boot/dietpi.txt
+        fi
 
-LOG="/var/log/dietpi-firstboot-setup.log"
-exec > >(tee -a "$LOG") 2>&1
+        # Install DietPi systemd services
+        echo "Installing DietPi systemd services..."
 
-echo "========================================"
-echo "DietPi First Boot Setup"
-echo "Date: $(date)"
-echo "========================================"
+        sudo tee /mnt/dietpi/etc/systemd/system/dietpi-boot.service > /dev/null << 'EOFSERVICE1'
+        [Unit]
+        Description=DietPi Boot Tasks
+        After=local-fs.target
+        Before=network-online.target
 
-# Check if already completed
-if [[ -f /boot/dietpi/.dietpi-ready-done ]]; then
-    echo "DietPi setup already completed, skipping..."
-    exit 0
-fi
+        [Service]
+        Type=oneshot
+        ExecStart=/bin/bash -c 'test -f /boot/dietpi/func/dietpi-preboot && /boot/dietpi/func/dietpi-preboot || true'
+        RemainAfterExit=yes
+        StandardOutput=journal+console
 
-# Detect hardware model (real hardware now!)
-echo "Detecting hardware..."
-if [[ -f /boot/dietpi/func/dietpi-obtain_hw_model ]]; then
-    chmod +x /boot/dietpi/func/dietpi-obtain_hw_model
-    /boot/dietpi/func/dietpi-obtain_hw_model
-fi
+        [Install]
+        WantedBy=multi-user.target
+        EOFSERVICE1
 
-# Source DietPi globals
-if [[ -f /boot/dietpi/dietpi-globals ]]; then
-    . /boot/dietpi/dietpi-globals
-fi
+        sudo tee /mnt/dietpi/etc/systemd/system/dietpi-postboot.service > /dev/null << 'EOFSERVICE2'
+        [Unit]
+        Description=DietPi Post-Boot Tasks
+        After=network-online.target
 
-# Run DietPi installer if present
-if [[ -f /root/dietpi-installer ]]; then
-    echo "Running DietPi installer..."
-    chmod +x /root/dietpi-installer
+        [Service]
+        Type=oneshot
+        ExecStart=/bin/bash -c 'test -f /boot/dietpi/func/dietpi-postboot && /boot/dietpi/func/dietpi-postboot || true'
+        RemainAfterExit=yes
+        StandardOutput=journal+console
 
-    # Set environment variables
-    export GITOWNER="MichaIng"
-    export GITBRANCH="master"
-    export WIFI_REQUIRED=1
-    export IMAGE_CREATOR="Yumi"
-    export PREIMAGE_INFO="Armbian"
+        [Install]
+        WantedBy=multi-user.target
+        EOFSERVICE2
 
-    /root/dietpi-installer
+        sudo tee /mnt/dietpi/etc/systemd/system/dietpi-ramdisk.service > /dev/null << 'EOFSERVICE3'
+        [Unit]
+        Description=DietPi RAMdisk/Log Setup
+        DefaultDependencies=no
+        After=local-fs.target
+        Before=sysinit.target
 
-    # Remove installer after completion
-    rm -f /root/dietpi-installer
-fi
+        [Service]
+        Type=oneshot
+        ExecStart=/bin/bash -c 'test -f /boot/dietpi/func/dietpi-ramdisk && /boot/dietpi/func/dietpi-ramdisk 0 || true'
+        ExecStop=/bin/bash -c 'test -f /boot/dietpi/func/dietpi-ramdisk && /boot/dietpi/func/dietpi-ramdisk 1 || true'
+        RemainAfterExit=yes
 
-# Mark as done
-touch /boot/dietpi/.dietpi-ready-done
-echo "DietPi first boot setup completed!"
+        [Install]
+        WantedBy=sysinit.target
+        EOFSERVICE3
 
-# Disable this service
-systemctl disable dietpi-firstboot-setup.service 2>/dev/null
+        # Enable services
+        sudo mkdir -p /mnt/dietpi/etc/systemd/system/multi-user.target.wants
+        sudo mkdir -p /mnt/dietpi/etc/systemd/system/sysinit.target.wants
+        sudo ln -sf /etc/systemd/system/dietpi-boot.service /mnt/dietpi/etc/systemd/system/multi-user.target.wants/dietpi-boot.service
+        sudo ln -sf /etc/systemd/system/dietpi-postboot.service /mnt/dietpi/etc/systemd/system/multi-user.target.wants/dietpi-postboot.service
+        sudo ln -sf /etc/systemd/system/dietpi-ramdisk.service /mnt/dietpi/etc/systemd/system/sysinit.target.wants/dietpi-ramdisk.service
 
-# Reboot to apply all changes
-echo "Rebooting in 5 seconds..."
-sleep 5
-reboot
-FIRSTBOOT_SCRIPT
+        # Set root password to 'dietpi'
+        echo "Setting default root password to 'dietpi'..."
+        ROOT_HASH=$(openssl passwd -6 'dietpi')
+        sudo sed -i "s|^root:[^:]*:|root:${ROOT_HASH}:|" /mnt/dietpi/etc/shadow
 
-        sudo chmod +x /mnt/dietpi/usr/local/bin/dietpi-firstboot-setup.sh
-
-        # Create systemd service
-        cat << 'SYSTEMD_SERVICE' | sudo tee /mnt/dietpi/etc/systemd/system/dietpi-firstboot-setup.service > /dev/null
-[Unit]
-Description=DietPi First Boot Setup
-After=network-online.target
-Wants=network-online.target
-Before=getty@tty1.service
-ConditionPathExists=!/boot/dietpi/.dietpi-ready-done
-
-[Service]
-Type=oneshot
-ExecStart=/usr/local/bin/dietpi-firstboot-setup.sh
-RemainAfterExit=yes
-StandardOutput=journal+console
-StandardError=journal+console
-
-[Install]
-WantedBy=multi-user.target
-SYSTEMD_SERVICE
-
-        # Enable the service
-        sudo ln -sf /etc/systemd/system/dietpi-firstboot-setup.service \
-            /mnt/dietpi/etc/systemd/system/multi-user.target.wants/dietpi-firstboot-setup.service
-
-        echo "First-boot service created and enabled"
-
-        # ========================================
-        # Verify installation
-        # ========================================
+        # Verification
         echo "=== Verification ==="
         echo "DietPi files in /boot/dietpi:"
-        ls -la /mnt/dietpi/boot/dietpi/
+        ls -la /mnt/dietpi/boot/dietpi/ | head -20
         echo ""
+        echo "DietPi commands in /usr/local/sbin: $(ls /mnt/dietpi/usr/local/sbin/dietpi-* 2>/dev/null | wc -l)"
         echo "State files:"
-        cat /mnt/dietpi/boot/dietpi/.hw_model
-        cat /mnt/dietpi/boot/dietpi/.install_stage
+        echo "  .hw_model: $(cat /mnt/dietpi/boot/dietpi/.hw_model)"
+        echo "  .install_stage: $(cat /mnt/dietpi/boot/dietpi/.install_stage)"
+        echo "  .version: $(cat /mnt/dietpi/boot/dietpi/.version)"
+        echo "Systemd services:"
+        ls -la /mnt/dietpi/etc/systemd/system/dietpi-*.service 2>/dev/null || echo "  (none found)"
         echo "=== End Verification ==="
 
-        # ========================================
         # Cleanup and unmount
-        # ========================================
         echo "Unmounting filesystems..."
         sync
         sudo umount /mnt/dietpi/boot 2>/dev/null || true
         sudo umount /mnt/dietpi 2>/dev/null || true
-
-        # Detach loop device
         sudo losetup -d "$LOOP_DEV"
 
         echo "========================================"
-        echo "DietPi-Ready image prepared!"
+        echo "DietPi 100% OFFLINE image prepared!"
         echo "========================================"
 
     - name: Rename and compress DietPi-Ready image
       shell: bash
       run: |
         cd ./dietpi-work
-        # Transform name: add -DietPi-Ready suffix
         BOARD=$(echo "${{ inputs.image_name }}" | sed 's/^Yumi-\([^-]*\)-.*/\1/')
         REST=$(echo "${{ inputs.image_name }}" | sed 's/^Yumi-[^-]*-//')
         DIETPI_NAME="${BOARD}-DietPi-Ready-${REST}"
