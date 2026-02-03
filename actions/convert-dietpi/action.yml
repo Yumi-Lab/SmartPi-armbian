@@ -234,49 +234,69 @@ runs:
 
         echo "Chroot exit code: $CHROOT_EXIT"
 
-        # Force correct install state for fresh image
-        # DietPi installer may set wrong value in chroot environment
+        # ========================================
+        # Force correct DietPi state files
+        # DietPi installer may set wrong values in chroot+QEMU environment
+        # ========================================
         sudo mkdir -p /mnt/dietpi/boot/dietpi
-        echo "=== Install stage debug ==="
-        if [[ -f /mnt/dietpi/boot/dietpi/.install_stage ]]; then
-            echo "Current install_stage value: $(cat /mnt/dietpi/boot/dietpi/.install_stage)"
-        else
-            echo "install_stage file does not exist"
-        fi
-        # Always force to -1 (first run setup pending) for fresh image
-        echo "-1" | sudo tee /mnt/dietpi/boot/dietpi/.install_stage
-        echo "Forced install_stage to: $(cat /mnt/dietpi/boot/dietpi/.install_stage)"
 
-        # Ensure .hw_model exists with correct value (fixes dietpi-banner syntax error)
-        echo "=== HW_MODEL debug ==="
+        echo "=== DietPi State Files Debug ==="
+
+        # Debug: Show what installer created
+        echo "Files created by installer:"
+        ls -la /mnt/dietpi/boot/dietpi/ 2>/dev/null || echo "Directory empty or missing"
+
+        # Show current content with hex dump for debugging
         if [[ -f /mnt/dietpi/boot/dietpi/.hw_model ]]; then
-            echo "Current .hw_model value: $(cat /mnt/dietpi/boot/dietpi/.hw_model)"
-        else
-            echo ".hw_model file does not exist"
+            echo "Current .hw_model content:"
+            cat /mnt/dietpi/boot/dietpi/.hw_model
+            echo "Hex dump:"
+            xxd /mnt/dietpi/boot/dietpi/.hw_model 2>/dev/null || od -c /mnt/dietpi/boot/dietpi/.hw_model
         fi
-        # Force HW_MODEL to correct value (25 = Generic Allwinner H3)
-        echo "${{ inputs.hw_model }}" | sudo tee /mnt/dietpi/boot/dietpi/.hw_model
+
+        if [[ -f /mnt/dietpi/boot/dietpi/.install_stage ]]; then
+            echo "Current .install_stage content:"
+            cat /mnt/dietpi/boot/dietpi/.install_stage
+        fi
+
+        # Force .install_stage to -1 (first run setup pending)
+        # Use printf to avoid any newline issues
+        printf '%s\n' "-1" | sudo tee /mnt/dietpi/boot/dietpi/.install_stage > /dev/null
+        sudo chmod 644 /mnt/dietpi/boot/dietpi/.install_stage
+        echo "Forced .install_stage to: $(cat /mnt/dietpi/boot/dietpi/.install_stage)"
+
+        # Force .hw_model to correct value (25 = Generic Allwinner H3)
+        # This MUST be just the number, nothing else
+        printf '%s\n' "${{ inputs.hw_model }}" | sudo tee /mnt/dietpi/boot/dietpi/.hw_model > /dev/null
         sudo chmod 644 /mnt/dietpi/boot/dietpi/.hw_model
         echo "Forced .hw_model to: $(cat /mnt/dietpi/boot/dietpi/.hw_model)"
-        echo "==========================="
+        echo "Hex verification:"
+        xxd /mnt/dietpi/boot/dietpi/.hw_model 2>/dev/null || od -c /mnt/dietpi/boot/dietpi/.hw_model
 
-        # Verify DietPi files exist
-        echo "Checking DietPi installation..."
-        if [[ -d /mnt/dietpi/boot/dietpi ]]; then
-            echo "DietPi boot directory exists"
-            ls -la /mnt/dietpi/boot/dietpi/ || true
-        else
-            echo "ERROR: /boot/dietpi directory not found!"
+        # Create .dietpi-autostart_index if missing (0 = console login)
+        if [[ ! -f /mnt/dietpi/boot/dietpi/.dietpi-autostart_index ]]; then
+            printf '%s\n' "0" | sudo tee /mnt/dietpi/boot/dietpi/.dietpi-autostart_index > /dev/null
+            sudo chmod 644 /mnt/dietpi/boot/dietpi/.dietpi-autostart_index
+            echo "Created .dietpi-autostart_index = 0"
         fi
 
+        # Create .update_stage if missing (needed for updates)
+        if [[ ! -f /mnt/dietpi/boot/dietpi/.update_stage ]]; then
+            printf '%s\n' "0" | sudo tee /mnt/dietpi/boot/dietpi/.update_stage > /dev/null
+            sudo chmod 644 /mnt/dietpi/boot/dietpi/.update_stage
+            echo "Created .update_stage = 0"
+        fi
+
+        echo "=== Final DietPi State Files ==="
+        ls -la /mnt/dietpi/boot/dietpi/
+        echo "================================="
+
+        # Verify dietpi.txt exists
         if [[ -f /mnt/dietpi/boot/dietpi.txt ]]; then
             echo "dietpi.txt exists"
         else
-            echo "WARNING: dietpi.txt not found"
+            echo "WARNING: dietpi.txt not found - DietPi installer may have failed"
         fi
-
-        # Ensure proper permissions
-        sudo chmod 644 /mnt/dietpi/boot/dietpi/.install_stage 2>/dev/null || true
 
         # Cleanup chroot artifacts
         echo "Cleaning up chroot..."
