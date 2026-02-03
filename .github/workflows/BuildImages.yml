@@ -129,27 +129,23 @@ jobs:
           name: ${{ steps.image_name.outputs.image_name }}.txt
           path: ${{ github.workspace }}/build/output/images/${{ steps.image_name.outputs.image_name }}.txt
 
-  dietpi:
-    name: Convert to DietPi
+  # ===========================================
+  # DietPi via QEMU (conversion complète en VM)
+  # ===========================================
+  dietpi-qemu:
+    name: DietPi QEMU (VM conversion)
     runs-on: ubuntu-latest
     needs: [setup, build]
     strategy:
       fail-fast: false
       matrix:
         include:
-          # NOTE: DietPi v10+ requires Debian 12 minimum
-          # Bullseye (Debian 11) - NO LONGER SUPPORTED by DietPi v10
-          # Keeping for legacy but may not work with latest dietpi-installer
-          - configfile: smartpad-bullseye-server
-            distro_target: "6"
-          - configfile: smartpi1-bullseye-server
-            distro_target: "6"
-          # Bookworm (Debian 12) - distro_target: 7 (oldstable)
+          # Bookworm (Debian 12) - distro_target: 7
           - configfile: smartpad-bookworm-server
             distro_target: "7"
           - configfile: smartpi1-bookworm-server
             distro_target: "7"
-          # Trixie (Debian 13) - distro_target: 8 (stable)
+          # Trixie (Debian 13) - distro_target: 8
           - configfile: smartpad-trixie-server
             distro_target: "8"
           - configfile: smartpi1-trixie-server
@@ -167,7 +163,6 @@ jobs:
         run: |
           source ./build-configs/configs/config-default.conf
           img_name="${VENDOR}-${{ matrix.configfile }}-${{ needs.setup.outputs.time }}"
-          # Add Debian version after codename (same mapping as build job)
           img_name=$(echo "${img_name}" | sed \
             -e 's/bullseye-/bullseye-debian11-/' \
             -e 's/bookworm-/bookworm-debian12-/' \
@@ -183,8 +178,56 @@ jobs:
           sudo update-binfmts --enable qemu-aarch64
           docker run --privileged --rm tonistiigi/binfmt --install all
 
-      - name: Convert to DietPi
+      - name: Convert to DietPi (QEMU)
         uses: ./build-configs/actions/convert-dietpi
+        with:
+          image_name: ${{ steps.image_name.outputs.image_name }}
+          hw_model: "25"
+          distro_target: ${{ matrix.distro_target }}
+
+  # ===========================================
+  # DietPi First-Boot (installation au démarrage hardware)
+  # ===========================================
+  dietpi-firstboot:
+    name: DietPi First-Boot (hardware install)
+    runs-on: ubuntu-latest
+    needs: [setup, build]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Bookworm (Debian 12) - distro_target: 7
+          - configfile: smartpad-bookworm-server
+            distro_target: "7"
+          - configfile: smartpi1-bookworm-server
+            distro_target: "7"
+          # Trixie (Debian 13) - distro_target: 8
+          - configfile: smartpad-trixie-server
+            distro_target: "8"
+          - configfile: smartpi1-trixie-server
+            distro_target: "8"
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          path: build-configs
+          fetch-depth: 0
+
+      - name: Generate image name
+        id: image_name
+        shell: bash
+        run: |
+          source ./build-configs/configs/config-default.conf
+          img_name="${VENDOR}-${{ matrix.configfile }}-${{ needs.setup.outputs.time }}"
+          img_name=$(echo "${img_name}" | sed \
+            -e 's/bullseye-/bullseye-debian11-/' \
+            -e 's/bookworm-/bookworm-debian12-/' \
+            -e 's/trixie-/trixie-debian13-/')
+          echo "image_name=${img_name}" >> $GITHUB_OUTPUT
+
+      # No QEMU needed - DietPi installer runs on first boot on real hardware
+      - name: Prepare DietPi (First-Boot)
+        uses: ./build-configs/actions/prepare-dietpi
         with:
           image_name: ${{ steps.image_name.outputs.image_name }}
           hw_model: "25"
