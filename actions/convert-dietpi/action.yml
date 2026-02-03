@@ -234,13 +234,31 @@ runs:
 
         echo "Chroot exit code: $CHROOT_EXIT"
 
-        # Check and fix install state if needed
-        if [[ ! -f /mnt/dietpi/boot/dietpi/.install_stage ]]; then
-            echo "WARNING: Install stage file not found, creating it..."
-            sudo mkdir -p /mnt/dietpi/boot/dietpi
-            # Stage -1 = first run setup pending (correct value for fresh image)
-            echo "-1" | sudo tee /mnt/dietpi/boot/dietpi/.install_stage
+        # Force correct install state for fresh image
+        # DietPi installer may set wrong value in chroot environment
+        sudo mkdir -p /mnt/dietpi/boot/dietpi
+        echo "=== Install stage debug ==="
+        if [[ -f /mnt/dietpi/boot/dietpi/.install_stage ]]; then
+            echo "Current install_stage value: $(cat /mnt/dietpi/boot/dietpi/.install_stage)"
+        else
+            echo "install_stage file does not exist"
         fi
+        # Always force to -1 (first run setup pending) for fresh image
+        echo "-1" | sudo tee /mnt/dietpi/boot/dietpi/.install_stage
+        echo "Forced install_stage to: $(cat /mnt/dietpi/boot/dietpi/.install_stage)"
+
+        # Ensure .hw_model exists with correct value (fixes dietpi-banner syntax error)
+        echo "=== HW_MODEL debug ==="
+        if [[ -f /mnt/dietpi/boot/dietpi/.hw_model ]]; then
+            echo "Current .hw_model value: $(cat /mnt/dietpi/boot/dietpi/.hw_model)"
+        else
+            echo ".hw_model file does not exist"
+        fi
+        # Force HW_MODEL to correct value (25 = Generic Allwinner H3)
+        echo "${{ inputs.hw_model }}" | sudo tee /mnt/dietpi/boot/dietpi/.hw_model
+        sudo chmod 644 /mnt/dietpi/boot/dietpi/.hw_model
+        echo "Forced .hw_model to: $(cat /mnt/dietpi/boot/dietpi/.hw_model)"
+        echo "==========================="
 
         # Verify DietPi files exist
         echo "Checking DietPi installation..."
