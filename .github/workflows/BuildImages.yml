@@ -39,9 +39,10 @@ jobs:
       - name: Create Matrix
         id: set-matrix
         run: |
-          JSON=$(find ${{ github.workspace }}/configs -type f -name "*.conf" -printf '%f\n' | sed '/config*/d;s#.conf##' | jq -R -s -c 'split("\n")[:-1]')
+          # TEMPORAIRE: Uniquement smartpi1-bullseye-server pour debug rapide
+          JSON='["smartpi1-bullseye-server"]'
           echo "configfiles=${JSON}" >> $GITHUB_OUTPUT
-          echo "::group::Build Matrix"
+          echo "::group::Build Matrix (TEMP: bullseye only)"
           echo "${JSON}"
           echo "::endgroup::"
 
@@ -131,6 +132,7 @@ jobs:
 
   # ===========================================
   # DietPi via QEMU (conversion complète en VM)
+  # TEMPORAIRE: Uniquement smartpi1-bullseye
   # ===========================================
   dietpi-qemu:
     name: DietPi QEMU (VM conversion)
@@ -140,16 +142,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Bookworm (Debian 12) - distro_target: 7
-          - configfile: smartpad-bookworm-server
-            distro_target: "7"
-          - configfile: smartpi1-bookworm-server
-            distro_target: "7"
-          # Trixie (Debian 13) - distro_target: 8
-          - configfile: smartpad-trixie-server
-            distro_target: "8"
-          - configfile: smartpi1-trixie-server
-            distro_target: "8"
+          # TEMPORAIRE: Uniquement Bullseye (Debian 11) pour smartpi1
+          - configfile: smartpi1-bullseye-server
+            distro_target: "6"
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -186,26 +181,20 @@ jobs:
           distro_target: ${{ matrix.distro_target }}
 
   # ===========================================
-  # DietPi First-Boot (installation au démarrage hardware)
+  # DietPi First-Boot (100% Offline)
+  # TEMPORAIRE: Uniquement smartpi1-bullseye
   # ===========================================
   dietpi-firstboot:
-    name: DietPi First-Boot (hardware install)
+    name: DietPi First-Boot (100% Offline)
     runs-on: ubuntu-latest
     needs: [setup, build]
     strategy:
       fail-fast: false
       matrix:
         include:
-          # Bookworm (Debian 12) - distro_target: 7
-          - configfile: smartpad-bookworm-server
-            distro_target: "7"
-          - configfile: smartpi1-bookworm-server
-            distro_target: "7"
-          # Trixie (Debian 13) - distro_target: 8
-          - configfile: smartpad-trixie-server
-            distro_target: "8"
-          - configfile: smartpi1-trixie-server
-            distro_target: "8"
+          # TEMPORAIRE: Uniquement Bullseye (Debian 11) pour smartpi1
+          - configfile: smartpi1-bullseye-server
+            distro_target: "6"
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -225,10 +214,32 @@ jobs:
             -e 's/trixie-/trixie-debian13-/')
           echo "image_name=${img_name}" >> $GITHUB_OUTPUT
 
-      # No QEMU needed - DietPi installer runs on first boot on real hardware
-      - name: Prepare DietPi (First-Boot)
+      # No QEMU needed - DietPi is pre-installed, 100% offline
+      - name: Prepare DietPi (100% Offline)
         uses: ./build-configs/actions/prepare-dietpi
         with:
           image_name: ${{ steps.image_name.outputs.image_name }}
           hw_model: "25"
           distro_target: ${{ matrix.distro_target }}
+
+# ===========================================
+# ARCHIVES - Configurations complètes (à restaurer plus tard)
+# ===========================================
+# Build matrix complet:
+#   JSON=$(find ${{ github.workspace }}/configs -type f -name "*.conf" -printf '%f\n' | sed '/config*/d;s#.conf##' | jq -R -s -c 'split("\n")[:-1]')
+#
+# DietPi matrix complet:
+#   matrix:
+#     include:
+#       - configfile: smartpad-bullseye-server
+#         distro_target: "6"
+#       - configfile: smartpi1-bullseye-server
+#         distro_target: "6"
+#       - configfile: smartpad-bookworm-server
+#         distro_target: "7"
+#       - configfile: smartpi1-bookworm-server
+#         distro_target: "7"
+#       - configfile: smartpad-trixie-server
+#         distro_target: "8"
+#       - configfile: smartpi1-trixie-server
+#         distro_target: "8"
