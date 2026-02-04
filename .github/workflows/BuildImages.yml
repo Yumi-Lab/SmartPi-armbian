@@ -39,10 +39,11 @@ jobs:
       - name: Create Matrix
         id: set-matrix
         run: |
-          # TEMPORAIRE: Uniquement smartpi1-bullseye-server pour debug rapide
-          JSON='["smartpi1-bullseye-server"]'
+          # TEMPORAIRE: Uniquement smartpi1-bookworm-server pour debug rapide
+          # DietPi v10+ requires Debian 12 minimum (Bullseye/Debian 11 not supported)
+          JSON='["smartpi1-bookworm-server"]'
           echo "configfiles=${JSON}" >> $GITHUB_OUTPUT
-          echo "::group::Build Matrix (TEMP: bullseye only)"
+          echo "::group::Build Matrix (TEMP: bookworm only)"
           echo "${JSON}"
           echo "::endgroup::"
 
@@ -132,7 +133,7 @@ jobs:
 
   # ===========================================
   # DietPi via QEMU (conversion complète en VM)
-  # TEMPORAIRE: Uniquement smartpi1-bullseye
+  # TEMPORAIRE: Uniquement smartpi1-bookworm
   # ===========================================
   dietpi-qemu:
     name: DietPi QEMU (VM conversion)
@@ -142,9 +143,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # TEMPORAIRE: Uniquement Bullseye (Debian 11) pour smartpi1
-          - configfile: smartpi1-bullseye-server
-            distro_target: "6"
+          # TEMPORAIRE: Uniquement Bookworm (Debian 12) pour smartpi1
+          # DietPi v10+ requires Debian 12 minimum
+          - configfile: smartpi1-bookworm-server
+            distro_target: "7"
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -182,7 +184,7 @@ jobs:
 
   # ===========================================
   # DietPi First-Boot (100% Offline)
-  # TEMPORAIRE: Uniquement smartpi1-bullseye
+  # TEMPORAIRE: Uniquement smartpi1-bookworm
   # ===========================================
   dietpi-firstboot:
     name: DietPi First-Boot (100% Offline)
@@ -192,9 +194,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # TEMPORAIRE: Uniquement Bullseye (Debian 11) pour smartpi1
-          - configfile: smartpi1-bullseye-server
-            distro_target: "6"
+          # TEMPORAIRE: Uniquement Bookworm (Debian 12) pour smartpi1
+          # DietPi v10+ requires Debian 12 minimum
+          - configfile: smartpi1-bookworm-server
+            distro_target: "7"
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -228,17 +231,15 @@ jobs:
 # Build matrix complet:
 #   JSON=$(find ${{ github.workspace }}/configs -type f -name "*.conf" -printf '%f\n' | sed '/config*/d;s#.conf##' | jq -R -s -c 'split("\n")[:-1]')
 #
-# DietPi matrix complet:
+# DietPi matrix complet (Debian 12+ uniquement, DietPi v10+ ne supporte plus Debian 11):
 #   matrix:
 #     include:
-#       - configfile: smartpad-bullseye-server
-#         distro_target: "6"
-#       - configfile: smartpi1-bullseye-server
-#         distro_target: "6"
+#       # Bookworm (Debian 12) - distro_target: 7
 #       - configfile: smartpad-bookworm-server
 #         distro_target: "7"
 #       - configfile: smartpi1-bookworm-server
 #         distro_target: "7"
+#       # Trixie (Debian 13) - distro_target: 8
 #       - configfile: smartpad-trixie-server
 #         distro_target: "8"
 #       - configfile: smartpi1-trixie-server

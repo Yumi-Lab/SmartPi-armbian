@@ -1,300 +1,185 @@
-# SmartPi-armbian - Document de Contexte
-# =====================================
-# Version: 1.5.4
-# Derniere mise a jour: 2026-02-02
-# Vendor: Yumi Lab
+# SmartPi Armbian - État du projet (2026-02-04)
 
-## APERCU DU PROJET
-SmartPi-armbian est un constructeur d'images personnalisees pour les appareils SmartPi
-basé sur le systeme d'exploitation Armbian. Le projet fournit des processus automatises
-de build et de conversion pour creer des images Linux adaptees au materiel SmartPi.
+## Résumé de la session
 
-Repository: https://github.com/Yumi-Lab/SmartPi-armbian
-License: GPL-3.0
+### Problème initial
+Les workflows GitHub Actions ne se déclenchaient plus automatiquement après commit, et l'image DietPi générée avait des erreurs au boot :
+- `/boot/dietpi/.hw_model: line 1: 25: command not found`
+- `((: == 75 : syntax error: operand expected`
 
-## STRUCTURE DU PROJET
+### Solutions implémentées
 
-```
-SmartPi-armbian/
-├── .github/workflows/
-│   ├── BuildImages.yml      # Workflow principal de build (orchestration)
-│   ├── Release.yml          # Workflow de creation de releases
-│   └── test                 # Workflow de test
-├── actions/
-│   ├── build-image/
-│   │   └── action.yml       # Action de build Armbian
-│   └── convert-dietpi/
-│       └── action.yml       # Action de conversion DietPi
-├── boards/
-│   ├── smartpi1.wip         # Config carte SmartPi One (H3 1GB)
-│   └── smartpad.wip         # Config carte SmartPad (H3 1GB + ecran)
-├── configs/
-│   ├── config-default.conf  # Configuration par defaut
-│   ├── smartpi1-*.conf      # Configs SmartPi One par distro
-│   └── smartpad-*.conf      # Configs SmartPad par distro
-├── userpatches/
-│   ├── customize-image.sh   # Script de personnalisation image
-│   ├── extensions/          # Hooks d'extension
-│   ├── header/              # Paquets kernel pre-compiles
-│   └── overlay/             # Fichiers a copier dans l'image
-│       ├── smartpi-config.txt          # Template config first-boot
-│       ├── smartpi-firstboot.sh        # Script first-boot
-│       ├── smartpi-firstboot.service   # Service systemd first-boot
-│       ├── 02-smartpad-rotate-screen.conf
-│       ├── 03-smartpad-rotate-touch.conf
-│       ├── 04-smartpad-disable-dpms.conf
-│       └── onboard-defaults.conf       # Config clavier virtuel
-├── context.txt              # CE FICHIER - Documentation de contexte
-├── README.md                # Documentation principale
-└── LICENSE                  # Licence GPL-3.0
+#### 1. Correction du fichier .hw_model
+**Problème** : Le fichier `.hw_model` contenait juste "25" alors que DietPi le source comme un script bash.
+
+**Solution** : Créer `.hw_model` comme script bash avec toutes les variables requises :
+```bash
+G_HW_MODEL=25
+G_HW_MODEL_NAME='Generic Allwinner H3'
+G_HW_ARCH=2
+G_HW_ARCH_NAME='armv7l'
+G_HW_CPUID=0
+G_HW_CPU_CORES=4
+G_DISTRO=7
+G_DISTRO_NAME='bookworm'
+G_ROOTFS_DEV='/dev/mmcblk0p1'
+G_HW_UUID=''
 ```
 
-## DISTRIBUTIONS SUPPORTEES
+**Fichiers modifiés** :
+- `actions/prepare-dietpi/action.yml`
+- `actions/convert-dietpi/action.yml`
 
-### Debian
+#### 2. Deux approches DietPi en parallèle
+
+##### A. dietpi-qemu (QEMU/VM)
+- Conversion complète via QEMU dans GitHub VM
+- Exécute `dietpi-installer` en chroot avec émulation ARM
+- `.install_stage=-1` (first-run setup à faire)
+- Image prête à l'emploi mais nécessite QEMU
+
+##### B. dietpi-firstboot (100% Offline)
+- Clone le repo DietPi complet
+- Installe TOUS les scripts dans `/boot/dietpi/` et `/usr/local/sbin/`
+- `.install_stage=2` (installation complète, pas de wizard)
+- Services systemd : `dietpi-boot`, `dietpi-postboot`, `dietpi-ramdisk`
+- **Aucun internet requis au boot**
+- Mot de passe root : `dietpi`
+
+#### 3. Workflow simplifié (temporaire)
+
+**Configuration actuelle** :
+- Build : `smartpi1-bookworm-server` uniquement (Debian 12)
+- DietPi QEMU : `smartpi1-bookworm-server` (distro_target=7)
+- DietPi Offline : `smartpi1-bookworm-server` (distro_target=7)
+
+**Raison** : DietPi v10+ ne supporte plus Debian 11 (Bullseye), minimum Debian 12 requis.
+
+**Artifacts produits** (3 au lieu de ~18) :
+1. `Yumi-smartpi1-bookworm-debian12-server-*.img.xz` (Armbian)
+2. `smartpi1-DietPi-bookworm-debian12-server-*.img.xz` (QEMU)
+3. `smartpi1-DietPi-Ready-bookworm-debian12-server-*.img.xz` (Offline)
+
+## Structure du projet
+
+### Actions GitHub
+```
+actions/
+├── build-image/           # Build Armbian
+├── convert-dietpi/        # DietPi via QEMU (avec .hw_model corrigé)
+├── prepare-dietpi/        # DietPi 100% offline (avec .hw_model corrigé)
+└── prepare-dietpi-offline/ # EXPERIMENTAL (pas utilisé)
+```
+
+### Workflow principal
+`.github/workflows/BuildImages.yml`
+
+**Jobs** :
+1. `setup` - Génère la matrice de build
+2. `build` - Build Armbian (smartpi1-bookworm uniquement)
+3. `dietpi-qemu` - Conversion QEMU
+4. `dietpi-firstboot` - Préparation offline
+
+**Triggers** :
+- Push sur `develop` dans `boards/`, `configs/`, `actions/`, `userpatches/`, workflow
+- Pull requests
+- Manuel (`workflow_dispatch`)
+
+## Commits récents (à pousser)
+
+1. `f1f0949` - Split DietPi actions (online/offline)
+2. `4d95940` - Add both DietPi approaches in parallel
+3. `b3e6e09` - Make prepare-dietpi 100% offline
+4. `e24d7ad` - Fix .hw_model as sourceable bash script
+5. `cba5fe6` - Simplify workflow to smartpi1-bookworm only (CORRIGÉ)
+
+## Configuration DietPi
+
+### Paramètres dans dietpi.txt
+- `AUTO_SETUP_NET_WIFI_ENABLED=1`
+- `AUTO_SETUP_HEADLESS=1`
+- `AUTO_SETUP_LOCALE=fr_FR.UTF-8`
+- `AUTO_SETUP_KEYBOARD_LAYOUT=fr`
+- `AUTO_SETUP_TIMEZONE=Europe/Paris`
+- `AUTO_SETUP_AUTOMATED=1` (skip wizard)
+- `AUTO_SETUP_ACCEPT_LICENSE=1`
+
+### Hardware
+- HW_MODEL=25 (Generic Allwinner H3)
+- Architectures : ARMv7l, 4 cores
+- Distro target : 7 (Bookworm/Debian 12)
+
+## Points importants
+
+### Compatibilité DietPi
+- ⚠️ **DietPi v10+ NE SUPPORTE PLUS Debian 11 (Bullseye)**
+- ✅ Minimum Debian 12 (Bookworm) requis
+- ✅ Debian 13 (Trixie) supporté
+
+### Fichier .hw_model
+- **DOIT** être un script bash sourceable
+- **NE DOIT PAS** contenir juste un numéro
+- Contient les variables G_HW_MODEL, G_DISTRO, etc.
+
+### Restauration du workflow complet
+La configuration complète (bookworm + trixie pour smartpad + smartpi1) est archivée en commentaires à la fin de `BuildImages.yml` pour restauration future.
+
+## Tests effectués
+
+### Image testée (ancienne version avec .hw_model cassé)
+`smartpi1-DietPi-bookworm-debian12-server-2026-02-03-1733.img`
+- ❌ Erreurs "25: command not found" et "syntax error"
+
+### Prochains tests
+- ⏳ smartpi1-DietPi-Ready-bookworm-* (100% offline avec .hw_model corrigé)
+- ⏳ smartpi1-DietPi-bookworm-* (QEMU avec .hw_model corrigé)
+
+## Prochaines étapes recommandées
+
+1. **Commiter et pousser** (commit final en cours)
+2. Tester l'image `smartpi1-DietPi-Ready-bookworm-*` (100% offline)
+3. Tester l'image `smartpi1-DietPi-bookworm-*` (QEMU)
+4. Si tests OK, restaurer le workflow complet (smartpad + trixie)
+5. Décider quelle approche (QEMU vs Offline) garder à long terme
+
+## Notes techniques
+
+### prepare-dietpi (Offline)
+- Clone `https://github.com/MichaIng/DietPi.git` (depth=1)
+- Copie TOUT le repo dans l'image
+- Pas d'exécution de dietpi-installer
+- Services systemd custom pour boot/postboot/ramdisk
+- .hw_model créé avec variables bash complètes
+
+### convert-dietpi (QEMU)
+- Télécharge dietpi-installer
+- Exécute dans chroot avec QEMU ARM emulation
+- Fake systemctl wrapper pour chroot
+- Force .hw_model (format bash) et .install_stage après installation
+
+## Distributions supportées
+
+### Debian (DietPi compatible)
 | Codename  | Version | DietPi Target | Status       |
 |-----------|---------|---------------|--------------|
-| bullseye  | 11      | 6             | Legacy       |
-| bookworm  | 12      | 7             | Stable actuel|
-| trixie    | 13      | 8             | Testing      |
+| bullseye  | 11      | 6             | ❌ NON supporté DietPi v10+ |
+| bookworm  | 12      | 7             | ✅ Stable actuel |
+| trixie    | 13      | 8             | ✅ Testing   |
 
-### Ubuntu
-| Codename  | Version | DietPi Target | Status       |
-|-----------|---------|---------------|--------------|
-| jammy     | 22.04   | N/A           | Server only  |
-| noble     | 24.04   | N/A           | LTS actuel   |
+### Ubuntu (Armbian uniquement, pas DietPi)
+| Codename  | Version | Status       |
+|-----------|---------|--------------|
+| jammy     | 22.04   | Server only  |
+| noble     | 24.04   | LTS actuel   |
 
-## CARTES SUPPORTEES
+## Commandes pour pousser
 
-### SmartPi One (smartpi1)
-- SoC: Allwinner H3 quad-core
-- RAM: 1GB
-- Configs: bullseye, jammy, bookworm, noble, trixie (server/desktop)
-
-### SmartPad (smartpad)
-- SoC: Allwinner H3 quad-core
-- RAM: 1GB
-- Ecran tactile integre
-- Package supplementaire: onboard (clavier virtuel)
-- Configs: bullseye, jammy, bookworm, noble, trixie (server/desktop)
-
-## FICHIERS DE CONFIGURATION ACTIFS
-
-### SmartPi One
-- smartpi1-bullseye-server.conf
-- smartpi1-jammy-server.conf
-- smartpi1-bookworm-server.conf
-- smartpi1-bookworm-desktop.conf
-- smartpi1-noble-server.conf
-- smartpi1-noble-desktop.conf
-- smartpi1-trixie-server.conf
-- smartpi1-trixie-desktop.conf
-
-### SmartPad
-- smartpad-bullseye-server.conf
-- smartpad-jammy-server.conf
-- smartpad-bookworm-server.conf
-- smartpad-bookworm-desktop.conf
-- smartpad-noble-server.conf
-- smartpad-noble-desktop.conf
-- smartpad-trixie-server.conf
-- smartpad-trixie-desktop.conf
-
-### Configs desactivees (.disabled)
-- smartpi1-bullseye-desktop.disabled
-- smartpad-bullseye-desktop.disabled
-
-## PROCESSUS DE BUILD
-
-### 1. Creation de la matrice (setup job)
-- Decouverte des fichiers *.conf dans configs/
-- Exclusion de config-default.conf
-- Generation timestamp UTC
-
-### 2. Build parallele (build job)
-- Checkout du repo
-- Build via actions/build-image
-- Renommage: {VENDOR}-{board}-{codename}-{distro_version}-{variant}-{timestamp}.img
-- Compression xz
-- Calcul SHA256
-- Upload artifacts
-
-### 3. Conversion DietPi (dietpi job) - Server uniquement
-- Download artifact Armbian
-- Montage image en loop device
-- Chroot avec QEMU ARM
-- Installation DietPi
-- Renommage: {board}-DietPi-{codename}-debian{version}-{variant}-{timestamp}.img
-- Recompression et nouveau checksum
-
-## CONVENTION DE NOMMAGE DES IMAGES
-
-### Images Armbian
-Format: `{VENDOR}-{board}-{codename}-{distro_version}-{variant}-{timestamp}.img.xz`
-Exemple: `Yumi-smartpi1-bookworm-debian12-server-2026-02-02-1234.img.xz`
-
-### Images DietPi
-Format: `{board}-DietPi-{codename}-debian{version}-{variant}-{timestamp}.img.xz`
-Exemple: `smartpi1-DietPi-bookworm-debian12-server-2026-02-02-1234.img.xz`
-
-## MAPPING CODENAME -> VERSION
-
-### Pour modifier le mapping, editer:
-1. `.github/workflows/BuildImages.yml` - Etapes "Generate Name Prefix" (build) et "Generate image name" (dietpi)
-   Note: Le mapping est applique une seule fois lors du build, DietPi herite du nom
-
-### Mapping actuel:
-```
-# Debian
-bullseye  -> debian11
-bookworm  -> debian12
-trixie    -> debian13
-
-# Ubuntu
-jammy     -> ubuntu22.04
-noble     -> ubuntu24.04
+```bash
+git status  # Vérifier qu'il ne reste que le commit du workflow
+git push origin develop
 ```
 
-## SYSTEME DE CONFIGURATION FIRST-BOOT
-
-La partition /boot est en FAT, accessible depuis Windows/Mac/Linux.
-Le systeme est 100% compatible Raspberry Pi Imager.
-
-### Methode 1: Fichier SmartPi natif
-Fichier: /boot/smartpi-config.txt
-Parametres disponibles:
-- APPLY_CONFIG=1      # Activer la configuration (OBLIGATOIRE)
-- HOSTNAME=xxx        # Nom de la machine
-- SSH_ENABLED=1       # Activer SSH
-- USERNAME=xxx        # Creer un utilisateur
-- USER_PASSWORD=xxx   # Mot de passe utilisateur
-- ROOT_PASSWORD=xxx   # Mot de passe root
-- WIFI_SSID=xxx       # SSID WiFi
-- WIFI_PASSWORD=xxx   # Mot de passe WiFi
-- WIFI_COUNTRY=FR     # Code pays WiFi
-- STATIC_IP=x.x.x.x   # IP statique
-- NETMASK=x.x.x.x     # Masque reseau
-- GATEWAY=x.x.x.x     # Passerelle
-- DNS=x.x.x.x         # Serveur DNS
-- TIMEZONE=xxx        # Fuseau horaire
-- LOCALE=xxx          # Locale systeme
-
-### Methode 2: Fichiers Raspberry Pi Imager (compatibilite)
-Fichiers supportes sur /boot:
-- ssh ou ssh.txt      # Fichier vide pour activer SSH
-- wpa_supplicant.conf # Config WiFi standard
-- userconf.txt        # Format: user:password_hash
-- hostname            # Nom de machine en texte brut
-- firstrun.sh         # Script custom execute au premier boot
-
-### Service: smartpi-firstboot.service
-- S'execute au premier demarrage
-- Traite d'abord les fichiers Raspberry Pi Imager
-- Puis applique smartpi-config.txt si APPLY_CONFIG=1
-- Se desactive automatiquement apres execution
-- Log: /var/log/smartpi-firstboot.log
-
-## VARIABLES IMPORTANTES
-
-### config-default.conf
-- VENDOR="Yumi"
-- DIST_VERSION="1.5.4"
-- RELEASE="bookworm" (par defaut)
-- ARMBIAN_BRANCH="main"
-- BUILD_MINIMAL="no"
-- COMPRESS_OUTPUTIMAGE="img"
-
-### Configs par carte
-- BOARD: "smartpi1" ou "smartpad"
-- RELEASE: codename de la distro
-- BUILD_DESKTOP: "yes" ou "no"
-- DESKTOP_ENVIRONMENT: "xfce" (si desktop)
-- BOOTSIZE: "512"
-- BOOTFS_TYPE: "fat"
-
-## PERSONNALISATION SMARTPAD
-
-### Rotation ecran (180 degres)
-- 02-smartpad-rotate-screen.conf -> X11
-- 03-smartpad-rotate-touch.conf  -> Input tactile
-- rotateConsole() dans customize-image.sh
-
-### Autres
-- 04-smartpad-disable-dpms.conf -> Desactive veille ecran
-- onboard-defaults.conf -> Config clavier virtuel
-- Patch LightDM pour clavier a l'ecran de login
-
-## CHROOT DIETPI
-
-### Problemes resolus:
-1. DNS: Copie de /etc/resolv.conf
-2. QEMU: Injection de qemu-arm-static
-3. systemctl: Wrapper fake qui gere enable/disable/mask
-
-### Variables d'environnement:
-- HW_MODEL="25" (Allwinner H3 generic)
-- DISTRO_TARGET: 6 (bullseye), 7 (bookworm), 8 (trixie)
-- IMAGE_CREATOR="Yumi"
-- PREIMAGE_INFO="Armbian"
-
-## RELEASE ET DEPLOIEMENT
-
-### Branche de dev: develop
-### Branche stable: main (et develop pour PRs)
-
-### Declencheurs de build:
-- Push sur develop
-- Pull request
-- workflow_dispatch manuel
-
-### Processus de release:
-1. Workflow dispatch avec version (ex: v1.5.0)
-2. Recuperation des derniers artifacts
-3. Creation du tag git
-4. Creation de la release GitHub
-5. Upload des images et checksums
-
-## NOTES TECHNIQUES
-
-### Emulation ARM
-- QEMU user-static pour builds cross-architecture
-- binfmt-support pour switch automatique
-- Docker tonistiigi/binfmt pour setup complet
-
-### Compression
-- Format: xz
-- Options: -efkvzT0 (max compression, multi-thread)
-
-### Checksums
-- Algorithme: SHA256
-- Fichiers: .img.sha256 et .img.xz.sha256
-
-## HISTORIQUE DES CHANGEMENTS MAJEURS
-
-### v1.5.4 (actuel)
-- Systeme de configuration first-boot
-- Support DietPi ameliore (bullseye, fake systemctl)
-- Support Debian 13 Trixie
-- Nommage des images avec version Debian/Ubuntu
-
-### Versions precedentes
-- Voir git log pour l'historique complet
-
-## POUR MODIFIER LE PROJET
-
-### Ajouter une nouvelle distribution:
-1. Creer configs/{board}-{codename}-{variant}.conf
-2. Ajouter le mapping codename->version dans BuildImages.yml
-3. Si DietPi supporte: ajouter dans la matrice dietpi + mapping dans convert-dietpi
-
-### Ajouter une nouvelle carte:
-1. Creer boards/{board}.wip
-2. Creer configs/{board}-{codename}-{variant}.conf pour chaque combo
-3. Ajouter personnalisations dans customize-image.sh si necessaire
-
-### Modifier la personnalisation:
-- userpatches/customize-image.sh pour scripts
-- userpatches/overlay/ pour fichiers a copier
+Cela déclenchera le workflow simplifié (smartpi1-bookworm uniquement).
 
 ---
-Fin du document de contexte
+Document mis à jour le 2026-02-04
