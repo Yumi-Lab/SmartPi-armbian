@@ -39,11 +39,9 @@ jobs:
       - name: Create Matrix
         id: set-matrix
         run: |
-          # TEMPORAIRE: Uniquement smartpi1-bookworm-server pour debug rapide
-          # DietPi v10+ requires Debian 12 minimum (Bullseye/Debian 11 not supported)
-          JSON='["smartpi1-bookworm-server"]'
+          JSON=$(find ${{ github.workspace }}/configs -type f -name "*.conf" -printf '%f\n' | sed '/config*/d;s#.conf##' | jq -R -s -c 'split("\n")[:-1]')
           echo "configfiles=${JSON}" >> $GITHUB_OUTPUT
-          echo "::group::Build Matrix (TEMP: bookworm only)"
+          echo "::group::Build Matrix"
           echo "${JSON}"
           echo "::endgroup::"
 
@@ -82,15 +80,6 @@ jobs:
           img_name="${VENDOR}"
           img_name="${img_name}-${{ matrix.configfile }}"
           img_name="${img_name}-${{ needs.setup.outputs.time }}"
-          # Add Debian/Ubuntu version after codename
-          # Debian: bullseye->debian11, bookworm->debian12, trixie->debian13
-          # Ubuntu: jammy->ubuntu22.04, noble->ubuntu24.04
-          img_name=$(echo "${img_name}" | sed \
-            -e 's/bullseye-/bullseye-debian11-/' \
-            -e 's/bookworm-/bookworm-debian12-/' \
-            -e 's/trixie-/trixie-debian13-/' \
-            -e 's/jammy-/jammy-ubuntu22.04-/' \
-            -e 's/noble-/noble-ubuntu24.04-/')
           echo "image_name=${img_name}" >> $GITHUB_OUTPUT
           echo "::group::Image name"
           echo "Image name: ${img_name}"
@@ -130,117 +119,3 @@ jobs:
         with:
           name: ${{ steps.image_name.outputs.image_name }}.txt
           path: ${{ github.workspace }}/build/output/images/${{ steps.image_name.outputs.image_name }}.txt
-
-  # ===========================================
-  # DietPi via QEMU (conversion complète en VM)
-  # TEMPORAIRE: Uniquement smartpi1-bookworm
-  # ===========================================
-  dietpi-qemu:
-    name: DietPi QEMU (VM conversion)
-    runs-on: ubuntu-latest
-    needs: [setup, build]
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # TEMPORAIRE: Uniquement Bookworm (Debian 12) pour smartpi1
-          # DietPi v10+ requires Debian 12 minimum
-          - configfile: smartpi1-bookworm-server
-            distro_target: "7"
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-        with:
-          path: build-configs
-          fetch-depth: 0
-
-      - name: Generate image name
-        id: image_name
-        shell: bash
-        run: |
-          source ./build-configs/configs/config-default.conf
-          img_name="${VENDOR}-${{ matrix.configfile }}-${{ needs.setup.outputs.time }}"
-          img_name=$(echo "${img_name}" | sed \
-            -e 's/bullseye-/bullseye-debian11-/' \
-            -e 's/bookworm-/bookworm-debian12-/' \
-            -e 's/trixie-/trixie-debian13-/')
-          echo "image_name=${img_name}" >> $GITHUB_OUTPUT
-
-      - name: Enable QEMU for ARM
-        shell: bash
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y qemu-user-static binfmt-support qemu-system-arm
-          sudo update-binfmts --enable qemu-arm
-          sudo update-binfmts --enable qemu-aarch64
-          docker run --privileged --rm tonistiigi/binfmt --install all
-
-      - name: Convert to DietPi (QEMU)
-        uses: ./build-configs/actions/convert-dietpi
-        with:
-          image_name: ${{ steps.image_name.outputs.image_name }}
-          hw_model: "25"
-          distro_target: ${{ matrix.distro_target }}
-
-  # ===========================================
-  # DietPi First-Boot (100% Offline)
-  # TEMPORAIRE: Uniquement smartpi1-bookworm
-  # ===========================================
-  dietpi-firstboot:
-    name: DietPi First-Boot (100% Offline)
-    runs-on: ubuntu-latest
-    needs: [setup, build]
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # TEMPORAIRE: Uniquement Bookworm (Debian 12) pour smartpi1
-          # DietPi v10+ requires Debian 12 minimum
-          - configfile: smartpi1-bookworm-server
-            distro_target: "7"
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-        with:
-          path: build-configs
-          fetch-depth: 0
-
-      - name: Generate image name
-        id: image_name
-        shell: bash
-        run: |
-          source ./build-configs/configs/config-default.conf
-          img_name="${VENDOR}-${{ matrix.configfile }}-${{ needs.setup.outputs.time }}"
-          img_name=$(echo "${img_name}" | sed \
-            -e 's/bullseye-/bullseye-debian11-/' \
-            -e 's/bookworm-/bookworm-debian12-/' \
-            -e 's/trixie-/trixie-debian13-/')
-          echo "image_name=${img_name}" >> $GITHUB_OUTPUT
-
-      # No QEMU needed - DietPi is pre-installed, 100% offline
-      - name: Prepare DietPi (100% Offline)
-        uses: ./build-configs/actions/prepare-dietpi
-        with:
-          image_name: ${{ steps.image_name.outputs.image_name }}
-          hw_model: "25"
-          distro_target: ${{ matrix.distro_target }}
-
-# ===========================================
-# ARCHIVES - Configurations complètes (à restaurer plus tard)
-# ===========================================
-# Build matrix complet:
-#   JSON=$(find ${{ github.workspace }}/configs -type f -name "*.conf" -printf '%f\n' | sed '/config*/d;s#.conf##' | jq -R -s -c 'split("\n")[:-1]')
-#
-# DietPi matrix complet (Debian 12+ uniquement, DietPi v10+ ne supporte plus Debian 11):
-#   matrix:
-#     include:
-#       # Bookworm (Debian 12) - distro_target: 7
-#       - configfile: smartpad-bookworm-server
-#         distro_target: "7"
-#       - configfile: smartpi1-bookworm-server
-#         distro_target: "7"
-#       # Trixie (Debian 13) - distro_target: 8
-#       - configfile: smartpad-trixie-server
-#         distro_target: "8"
-#       - configfile: smartpi1-trixie-server
-#         distro_target: "8"

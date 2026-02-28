@@ -31,7 +31,7 @@ Custom Armbian image builder for SmartPi devices by **[Yumi Lab](https://www.yum
 
 ## Introduction
 
-SmartPi-armbian is a custom image builder for SmartPi devices, leveraging the Armbian operating system. This repository contains the tools and configurations necessary to create tailored Linux images for SmartPi hardware, with automated build and conversion processes including DietPi support.
+SmartPi-armbian is a custom image builder for SmartPi devices, leveraging the Armbian operating system. This repository contains the tools and configurations necessary to create tailored Linux images for SmartPi hardware, with automated build processes.
 
 ## Supported Hardware
 
@@ -60,24 +60,19 @@ SmartPi-armbian is a custom image builder for SmartPi devices, leveraging the Ar
 ### Debian
 ![Debian](https://img.shields.io/badge/Debian-A81D33?style=for-the-badge&logo=debian&logoColor=white)
 
-| Codename | Version | DietPi Support | Status |
-|----------|---------|----------------|--------|
-| ![Bullseye](https://img.shields.io/badge/Bullseye-Debian_11-A81D33?logo=debian&logoColor=white) | Debian 11 | ✅ Yes (target: 6) | Legacy |
-| ![Bookworm](https://img.shields.io/badge/Bookworm-Debian_12-A81D33?logo=debian&logoColor=white) | Debian 12 | ✅ Yes (target: 7) | **Current Stable** |
-| ![Trixie](https://img.shields.io/badge/Trixie-Debian_13-A81D33?logo=debian&logoColor=white) | Debian 13 | ✅ Yes (target: 8) | Testing |
+| Codename | Version | Status |
+|----------|---------|--------|
+| ![Bullseye](https://img.shields.io/badge/Bullseye-Debian_11-A81D33?logo=debian&logoColor=white) | Debian 11 | Legacy |
+| ![Bookworm](https://img.shields.io/badge/Bookworm-Debian_12-A81D33?logo=debian&logoColor=white) | Debian 12 | **Current Stable** |
+| ![Trixie](https://img.shields.io/badge/Trixie-Debian_13-A81D33?logo=debian&logoColor=white) | Debian 13 | Testing |
 
 ### Ubuntu
 ![Ubuntu](https://img.shields.io/badge/Ubuntu-E95420?style=for-the-badge&logo=ubuntu&logoColor=white)
 
-| Codename | Version | DietPi Support | Status |
-|----------|---------|----------------|--------|
-| ![Jammy](https://img.shields.io/badge/Jammy-22.04_LTS-E95420?logo=ubuntu&logoColor=white) | Ubuntu 22.04 | ❌ No | Server only |
-| ![Noble](https://img.shields.io/badge/Noble-24.04_LTS-E95420?logo=ubuntu&logoColor=white) | Ubuntu 24.04 | ❌ No | **Current LTS** |
-
-### DietPi
-<img src="assets/dietpi-logo.png" alt="DietPi" height="40"/>
-
-DietPi conversion is available for **Debian server images only**.
+| Codename | Version | Status |
+|----------|---------|--------|
+| ![Jammy](https://img.shields.io/badge/Jammy-22.04_LTS-E95420?logo=ubuntu&logoColor=white) | Ubuntu 22.04 | Server only |
+| ![Noble](https://img.shields.io/badge/Noble-24.04_LTS-E95420?logo=ubuntu&logoColor=white) | Ubuntu 24.04 | **Current LTS** |
 
 ## Image Naming Convention
 
@@ -90,13 +85,6 @@ All images include the distribution name and version for easy identification.
 **Examples:**
 - `Yumi-smartpi1-bookworm-debian12-server-2026-02-02-1234.img.xz`
 - `Yumi-smartpad-noble-ubuntu24.04-desktop-2026-02-02-1234.img.xz`
-
-### DietPi Images
-```
-{board}-DietPi-{codename}-{distro_version}-{variant}-{timestamp}.img.xz
-```
-**Example:**
-- `smartpi1-DietPi-bookworm-debian12-server-2026-02-02-1234.img.xz`
 
 ## First-Boot Configuration
 
@@ -217,8 +205,7 @@ SmartPi-armbian/
 │   ├── BuildImages.yml      # Main build workflow
 │   └── Release.yml          # Release workflow
 ├── actions/
-│   ├── build-image/         # Armbian build action
-│   └── convert-dietpi/      # DietPi conversion action
+│   └── build-image/         # Armbian build action
 ├── boards/
 │   ├── smartpi1.wip         # SmartPi One board config
 │   └── smartpad.wip         # SmartPad board config
@@ -232,7 +219,6 @@ SmartPi-armbian/
 │       ├── smartpi-config.txt
 │       ├── smartpi-firstboot.sh
 │       └── smartpi-firstboot.service
-├── context.txt              # Project documentation
 └── README.md
 ```
 
@@ -255,14 +241,6 @@ BOOTFS_TYPE="fat"
 Edit `.github/workflows/BuildImages.yml` and add the mapping in the "Generate Name Prefix" step:
 ```yaml
 -e 's/newrelease-/newrelease-debian14-/'
-```
-
-### 3. Add DietPi Support (Optional)
-
-Add to the DietPi matrix in `BuildImages.yml`:
-```yaml
-- configfile: smartpi1-newrelease-server
-  distro_target: "9"
 ```
 
 ## Contribution
@@ -309,10 +287,6 @@ Please note that while the original work is open-source and licensed under the G
 <p align="center">
   <a href="https://www.armbian.com">
     <img src="assets/armbian-logo.png" alt="Armbian" height="50"/>
-  </a>
-  &nbsp;&nbsp;&nbsp;&nbsp;
-  <a href="https://dietpi.com">
-    <img src="assets/dietpi-logo.png" alt="DietPi" height="50"/>
   </a>
   &nbsp;&nbsp;&nbsp;&nbsp;
   <a href="https://www.yumi-lab.com">
