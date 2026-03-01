@@ -9,3 +9,4 @@ PACKAGE_LIST_BOARD="${PACKAGE_LIST_BOARD} firefox-esr onboard"
 
 BRANCH="legacy"
 RELEASE="bullseye"
+ARMBIAN_BRANCH="v24.02"
