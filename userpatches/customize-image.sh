@@ -21,8 +21,9 @@ BOARD=$3
 BUILD_DESKTOP=$4
 
 Main() {
-    # Install first-boot configuration system for all boards
-    installFirstBootConfig
+    # TODO: First-boot config system disabled for now (not working)
+    # Re-enable when fixed
+    # installFirstBootConfig
 
     case "${BOARD}" in
         smartpad)
