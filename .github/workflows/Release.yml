@@ -111,12 +111,3 @@ jobs:
           files: ./build/output/images/*.sha256
           tag_name: ${{ github.event.inputs.version }}
           token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Trigger ClawbotOS build
-        run: |
-          curl -s -X POST \
-            -H "Authorization: token ${{ secrets.CLAWBOT_DISPATCH_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/Yumi-Lab/clawbot/dispatches \
-            -d '{"event_type":"smartpi-armbian-release","client_payload":{"version":"${{ github.event.inputs.version }}"}}'
-          echo "ClawbotOS build triggered for SmartPi-armbian ${{ github.event.inputs.version }}"
