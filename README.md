@@ -7,7 +7,7 @@
 # SmartPi-armbian
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![Version](https://img.shields.io/badge/Version-1.5.4-green.svg)](https://github.com/Yumi-Lab/SmartPi-armbian/releases)
+[![Version](https://img.shields.io/badge/Version-1.6.0-green.svg)](https://github.com/Yumi-Lab/SmartPi-armbian/releases)
 [![Build Images](https://github.com/Yumi-Lab/SmartPi-armbian/actions/workflows/BuildImages.yml/badge.svg)](https://github.com/Yumi-Lab/SmartPi-armbian/actions/workflows/BuildImages.yml)
 [![Wiki](https://img.shields.io/badge/Wiki-Documentation-orange?logo=gitbook&logoColor=white)](https://wiki.yumi-lab.com)
 
@@ -88,73 +88,9 @@ All images include the distribution name and version for easy identification.
 
 ## First-Boot Configuration
 
-![Config](https://img.shields.io/badge/Headless_Setup-Supported-success?style=flat-square&logo=raspberrypi&logoColor=white)
-![RPI Compatible](https://img.shields.io/badge/Raspberry_Pi_Imager-Compatible-C51A4A?style=flat-square&logo=raspberrypi&logoColor=white)
+> **Note:** The first-boot configuration system (`smartpi-config.txt`) is currently disabled and under development. It will be re-enabled in a future release.
 
-SmartPi images include a first-boot configuration system. The boot partition is **FAT formatted**, so you can edit configuration files on **Windows, Mac, or Linux** before inserting the SD card.
-
-### Method 1: SmartPi Config File (Recommended)
-
-Edit `/boot/smartpi-config.txt` on the SD card:
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `APPLY_CONFIG` | Set to `1` to activate configuration | `0` |
-| `HOSTNAME` | Device hostname | Board name |
-| `SSH_ENABLED` | Enable SSH (`1` or `0`) | `1` |
-| `USERNAME` | Create a user account | - |
-| `USER_PASSWORD` | User password | - |
-| `ROOT_PASSWORD` | Root password | - |
-| `WIFI_SSID` | WiFi network name | - |
-| `WIFI_PASSWORD` | WiFi password | - |
-| `WIFI_COUNTRY` | WiFi country code | `FR` |
-| `STATIC_IP` | Static IP address | - |
-| `NETMASK` | Network mask | `255.255.255.0` |
-| `GATEWAY` | Default gateway | - |
-| `DNS` | DNS server | - |
-| `TIMEZONE` | System timezone | - |
-| `LOCALE` | System locale | - |
-
-**Example:**
-```ini
-APPLY_CONFIG=1
-HOSTNAME=my-smartpi
-SSH_ENABLED=1
-USERNAME=pi
-USER_PASSWORD=raspberry
-WIFI_SSID=MyNetwork
-WIFI_PASSWORD=MyPassword
-WIFI_COUNTRY=FR
-TIMEZONE=Europe/Paris
-```
-
-### Method 2: Raspberry Pi Imager (Recommended for beginners)
-
-**Use Raspberry Pi Imager's built-in configuration!** Click the ⚙️ gear icon to set:
-- Hostname
-- Username & password
-- WiFi network
-- SSH access
-- Locale settings
-
-These settings are automatically applied on first boot.
-
-#### Supported Configuration Formats
-
-| Format | Files | Description |
-|--------|-------|-------------|
-| **Cloud-init** (new) | `user-data`, `network-*.con` | Native RPi Imager format |
-| **Legacy** | `ssh`, `wpa_supplicant.conf`, `userconf.txt` | Traditional files |
-
-This means you can use **Raspberry Pi Imager** to pre-configure everything, then flash a SmartPi image!
-
-### How It Works
-
-1. On first boot, the `smartpi-firstboot` service runs
-2. It checks for Raspberry Pi Imager files first
-3. Then processes `smartpi-config.txt` if `APPLY_CONFIG=1`
-4. Configuration is logged to `/var/log/smartpi-firstboot.log`
-5. Processed files are removed or renamed to `.done`
+For headless setup, use the standard Armbian method: connect via SSH with default credentials (`root` / `1234`) and follow the interactive setup.
 
 ## Getting Started
 
