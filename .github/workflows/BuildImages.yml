@@ -57,7 +57,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [setup]
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         configfile: ${{ fromJson(needs.setup.outputs.configfiles) }}
     steps:
