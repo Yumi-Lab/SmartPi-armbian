@@ -69,7 +69,7 @@ jobs:
             curl -sL -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "$url" -o artifact.zip
             unzip -o artifact.zip "$name"
             rm artifact.zip
-            gh release upload "${{ github.event.inputs.version }}" "$name" --clobber
+            gh release upload "${{ github.event.inputs.version }}" "$name" --clobber --repo "${{ github.repository }}"
             rm -f "$name"
             echo "✅ $name"
           done
