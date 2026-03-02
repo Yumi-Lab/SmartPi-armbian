@@ -28,7 +28,7 @@ jobs:
         run: |
           mkdir -p ./build/output/images/
           curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-          "https://api.github.com/repos/${{ github.repository }}/actions/runs/$RUN_ID/artifacts" | jq -r '.artifacts[] | select(.name | test(".*img.xz")) | .archive_download_url' | while read url; do
+          "https://api.github.com/repos/${{ github.repository }}/actions/runs/$RUN_ID/artifacts?per_page=100" | jq -r '.artifacts[] | select(.name | test(".*img.xz")) | .archive_download_url' | while read url; do
             curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -L "$url" -o ./build/output/images/artifact.zip
             unzip ./build/output/images/artifact.zip -d ./build/output/images/
           done
