@@ -44,6 +44,6 @@ diff --git a/arch/arm/boot/dts/allwinner/sun8i-h3.dtsi b/arch/arm/boot/dts/allwi
 +			turbo-mode;
  		};
  	};
-
+ 
 --
 2.43.0
