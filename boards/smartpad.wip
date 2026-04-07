@@ -6,7 +6,6 @@ MODULES_LEGACY="g_serial"
 MODULES_CURRENT="g_serial"
 SERIALCON="ttyS0"
 KERNEL_TARGET="legacy,current,edge"
-PACKAGE_LIST_BOARD="${PACKAGE_LIST_BOARD} onboard"
 
 function post_config_uboot_target__extra_configs_for_smartpad() {
 	display_alert "$BOARD" "set dram clock" "info"
