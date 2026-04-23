@@ -1,0 +1,49 @@
+/*
+ * DTS Overlay: Experimental H3 overclock OPP entries
+ *
+ * Adds OPP entries above 1296 MHz for Allwinner H3.
+ * Requires: adequate cooling + PMIC capable of 1.46V on VDD-CPUX
+ *
+ * Load at boot:  armbian-add-overlay sun8i-h3-overclock-experimental.dts
+ * Or add to:     /boot/armbianEnv.txt -> user_overlays=sun8i-h3-overclock-experimental
+ *
+ * PLL_CPUX formula: freq = 24MHz * N * K / (M * P)
+ *   1368 MHz = 24 * 19 * 3 / 1 / 1
+ *   1488 MHz = 24 * 31 * 2 / 1 / 1
+ *   1512 MHz = 24 * 21 * 3 / 1 / 1
+ *
+ * WARNING: Exceeds Allwinner H3 specifications. Use at your own risk.
+ */
+
+/dts-v1/;
+/plugin/;
+
+/ {
+	compatible = "allwinner,sun8i-h3";
+
+	fragment@0 {
+		target = <&cpu0_opp_table>;
+		__overlay__ {
+			opp-1368000000 {
+				opp-hz = /bits/ 64 <1368000000>;
+				opp-microvolt = <1400000 1400000 1400000>;
+				clock-latency-ns = <244144>;
+				turbo-mode;
+			};
+
+			opp-1488000000 {
+				opp-hz = /bits/ 64 <1488000000>;
+				opp-microvolt = <1440000 1440000 1440000>;
+				clock-latency-ns = <244144>;
+				turbo-mode;
+			};
+
+			opp-1512000000 {
+				opp-hz = /bits/ 64 <1512000000>;
+				opp-microvolt = <1460000 1460000 1460000>;
+				clock-latency-ns = <244144>;
+				turbo-mode;
+			};
+		};
+	};
+};

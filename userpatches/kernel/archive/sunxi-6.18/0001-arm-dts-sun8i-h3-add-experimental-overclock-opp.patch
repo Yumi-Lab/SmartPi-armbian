@@ -1,0 +1,29 @@
+From: Nicolas Michaut <nicolas@yumilab.com>
+Subject: [PATCH] ARM: dts: sun8i-h3: enable 1368 MHz overclock OPP
+Date: 2026-04-06
+
+Re-enable the 1368 MHz OPP that Armbian megous patchset adds but
+disables by default. Tested stable under full CPU load with adequate
+cooling (heatsink + dual fan). Thermal throttle protects at 85C.
+
+1368 MHz = 24 * 19 * 3 = PLL_CPUX (N=19, K=3) @ 1.40V
+
+Signed-off-by: Nicolas Michaut <nicolas@yumilab.com>
+---
+ arch/arm/boot/dts/allwinner/sun8i-h3.dtsi | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/arch/arm/boot/dts/allwinner/sun8i-h3.dtsi b/arch/arm/boot/dts/allwinner/sun8i-h3.dtsi
+--- a/arch/arm/boot/dts/allwinner/sun8i-h3.dtsi
++++ b/arch/arm/boot/dts/allwinner/sun8i-h3.dtsi
+@@ -101,7 +101,6 @@
+ 		opp-1368000000 {
+ 			opp-hz = /bits/ 64 <1368000000>;
+ 			opp-microvolt = <1400000 1400000 1400000>;
+ 			clock-latency-ns = <244144>; /* 8 32k periods */
+-			status = "disabled";
+ 		};
+ 	};
+ 
+--
+2.43.0
