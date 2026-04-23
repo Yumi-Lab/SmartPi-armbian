@@ -21,6 +21,13 @@ BOARD=$3
 BUILD_DESKTOP=$4
 
 Main() {
+    # Install dwarves (provides pahole) on Bullseye where pahole is not a standalone package
+    if [[ "${RELEASE}" == "bullseye" ]]; then
+        echo "Installing dwarves (pahole) for Bullseye ..."
+        apt-get update && apt-get install -y dwarves
+        echo "Installing dwarves (pahole) for Bullseye ... [DONE]"
+    fi
+
     # TODO: First-boot config system disabled for now (not working)
     # Re-enable when fixed
     # installFirstBootConfig
