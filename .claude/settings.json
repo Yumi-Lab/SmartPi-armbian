@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /Users/nicolasmichaut/Documents/GitHub/SmartPi-armbian -name *.sh -o -name *.conf -o -name *.patch -o -name *.dts -o -name *.dtsi)",
+      "Bash(git rm:*)",
+      "Bash(git push:*)"
+    ],
+    "additionalDirectories": [
+      "/Users/nicolasmichaut/Documents/GitHub/SmartPi-armbian/userpatches/kernel/archive"
+    ]
+  }
+}
