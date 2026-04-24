@@ -1,5 +1,5 @@
 # Allwinner H3 quad core 1Gb SoC
-BOARD_NAME="SmartPad"
+BOARD_NAME="SmartPi One"
 BOARDFAMILY="sun8i"
 BOOTCONFIG="nanopi_m1_defconfig"
 MODULES_LEGACY="g_serial"
@@ -7,7 +7,7 @@ MODULES_CURRENT="g_serial"
 SERIALCON="ttyS0"
 KERNEL_TARGET="legacy,current,edge"
 
-function post_config_uboot_target__extra_configs_for_smartpad() {
+function post_config_uboot_target__extra_configs_for_smartpi1() {
 	display_alert "$BOARD" "set dram clock" "info"
 	run_host_command_logged scripts/config --set-val CONFIG_DRAM_CLK "576"
 	run_host_command_logged scripts/config --set-val CONFIG_DRAM_ZQ "3881979"

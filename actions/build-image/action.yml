@@ -72,8 +72,8 @@ runs:
       run: |
         if [[ -d ./build-configs/boards ]]; then
           cp -R -v ./build-configs/boards/* ./build/config/boards
-          # smartpi1 shares the same hardware definition as smartpad
-          cp -v ./build-configs/boards/smartpad.wip ./build/config/boards/smartpi1.wip
+          # SmartPad uses the same H3 hardware as SmartPi One
+          cp -v ./build-configs/boards/smartpi1.wip ./build/config/boards/smartpad.wip
         else
           echo -e "\e[0;33mNo custom board configuration found ... [SKIPPED]\e[0m"
           exit 0
