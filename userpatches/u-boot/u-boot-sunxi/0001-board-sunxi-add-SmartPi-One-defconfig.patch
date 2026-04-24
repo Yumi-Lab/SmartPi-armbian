@@ -1,0 +1,35 @@
+From: Nicolas Michaut <nicolas@yumilab.com>
+Subject: [PATCH] board: sunxi: add SmartPi One defconfig
+Date: 2026-04-24
+
+Add defconfig for the Yumi Lab SmartPi One board.
+Based on nanopi_m1_defconfig (same Allwinner H3 SoC).
+
+DRAM tuned to 576 MHz with ZQ calibration and ODT enabled
+for improved memory stability.
+
+Signed-off-by: Nicolas Michaut <nicolas@yumilab.com>
+---
+ configs/smartpi1_defconfig | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+ create mode 100644 configs/smartpi1_defconfig
+
+diff --git a/configs/smartpi1_defconfig b/configs/smartpi1_defconfig
+new file mode 100644
+--- /dev/null
++++ b/configs/smartpi1_defconfig
+@@ -0,0 +1,12 @@
++CONFIG_ARM=y
++CONFIG_ARCH_SUNXI=y
++CONFIG_DEFAULT_DEVICE_TREE="sun8i-h3-nanopi-m1"
++CONFIG_DRAM_CLK=576
++CONFIG_DRAM_ZQ=3881979
++CONFIG_DRAM_ODT_EN=y
++CONFIG_SPL=y
++CONFIG_MACH_SUN8I_H3=y
++# CONFIG_SYS_MALLOC_CLEAR_ON_INIT is not set
++CONFIG_USB_EHCI_HCD=y
++CONFIG_USB_OHCI_HCD=y
++CONFIG_SYS_BOARD="smartpi1"
+--
+2.43.0
