@@ -13,6 +13,12 @@
 
 Custom Armbian image builder for SmartPi devices by **[Yumi Lab](https://www.yumi-lab.com)**.
 
+### Key features (since v1.7.0)
+
+- **Kernel headers pre-installed** — allows compiling and loading kernel modules directly on the board (WiFi drivers, GPIO drivers, DKMS modules, etc.) without needing a cross-compilation setup
+- **H3 CPU overclock to 1368 MHz** (since v1.8.0) — +5.5% over stock 1296 MHz, managed automatically by the cpufreq governor
+- **18 images** built automatically for 2 boards x 5 distros x server/desktop
+
 ## Table of Contents
 
 - [Introduction](#introduction)
