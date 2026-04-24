@@ -7,7 +7,7 @@
 # SmartPi-armbian
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![Version](https://img.shields.io/badge/Version-1.6.0-green.svg)](https://github.com/Yumi-Lab/SmartPi-armbian/releases)
+[![Version](https://img.shields.io/badge/Version-1.8.0--rc1-green.svg)](https://github.com/Yumi-Lab/SmartPi-armbian/releases)
 [![Build Images](https://github.com/Yumi-Lab/SmartPi-armbian/actions/workflows/BuildImages.yml/badge.svg)](https://github.com/Yumi-Lab/SmartPi-armbian/actions/workflows/BuildImages.yml)
 [![Wiki](https://img.shields.io/badge/Wiki-Documentation-orange?logo=gitbook&logoColor=white)](https://wiki.yumi-lab.com)
 
@@ -18,6 +18,7 @@ Custom Armbian image builder for SmartPi devices by **[Yumi Lab](https://www.yum
 - [Introduction](#introduction)
 - [Supported Hardware](#supported-hardware)
 - [Supported Distributions](#supported-distributions)
+- [H3 CPU Overclock](#h3-cpu-overclock)
 - [Image Naming Convention](#image-naming-convention)
 - [First-Boot Configuration](#first-boot-configuration)
 - [Getting Started](#getting-started)
@@ -71,8 +72,30 @@ SmartPi-armbian is a custom image builder for SmartPi devices, leveraging the Ar
 
 | Codename | Version | Status |
 |----------|---------|--------|
-| ![Jammy](https://img.shields.io/badge/Jammy-22.04_LTS-E95420?logo=ubuntu&logoColor=white) | Ubuntu 22.04 | Server only |
+| ![Jammy](https://img.shields.io/badge/Jammy-22.04_LTS-E95420?logo=ubuntu&logoColor=white) | Ubuntu 22.04 | LTS |
 | ![Noble](https://img.shields.io/badge/Noble-24.04_LTS-E95420?logo=ubuntu&logoColor=white) | Ubuntu 24.04 | **Current LTS** |
+
+## H3 CPU Overclock
+
+Since **v1.8.0**, all images include a kernel patch that enables the H3 CPU to scale up to **1368 MHz** (stock: 1296 MHz) at 1.40V. The overclock is managed automatically by the cpufreq governor under load.
+
+| Frequency | Voltage | Status |
+|-----------|---------|--------|
+| 1296 MHz | 1.34V | stock |
+| **1368 MHz** | **1.40V** | enabled |
+
+Thermal throttle activates at 85°C. A heatsink with active fan is recommended for sustained workloads.
+
+```bash
+# Verify max frequency
+cat /sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq
+# Expected: 1368000
+
+# Monitor temperature
+cat /sys/class/thermal/thermal_zone0/temp
+```
+
+See [docs/H3-OVERCLOCK.md](docs/H3-OVERCLOCK.md) for technical details.
 
 ## Image Naming Convention
 
@@ -90,7 +113,7 @@ All images include the distribution name and version for easy identification.
 
 > **Note:** The first-boot configuration system (`smartpi-config.txt`) is currently disabled and under development. It will be re-enabled in a future release.
 
-For headless setup, use the standard Armbian method: connect via SSH with default credentials (`root` / `1234`) and follow the interactive setup.
+At first boot, Armbian will prompt you to create a root password and a first user account. For headless setup, connect via serial console or SSH (root login with no password on first connection) and follow the interactive setup.
 
 ## Getting Started
 
@@ -138,23 +161,23 @@ The build process is fully automated using GitHub Actions.
 ```
 SmartPi-armbian/
 ├── .github/workflows/
-│   ├── BuildImages.yml      # Main build workflow
-│   └── Release.yml          # Release workflow
+│   ├── BuildImages.yml         # Main build workflow (18 images)
+│   └── Release.yml             # Release workflow
 ├── actions/
-│   └── build-image/         # Armbian build action
+│   └── build-image/            # Armbian build action
 ├── boards/
-│   ├── smartpi1.wip         # SmartPi One board config
-│   └── smartpad.wip         # SmartPad board config
+│   └── smartpad.wip            # H3 board config (shared by SmartPi1 & SmartPad)
 ├── configs/
-│   ├── config-default.conf  # Default build settings
-│   ├── smartpi1-*.conf      # SmartPi One variants
-│   └── smartpad-*.conf      # SmartPad variants
+│   ├── config-default.conf     # Default build settings
+│   ├── smartpi1-*.conf         # SmartPi One variants
+│   └── smartpad-*.conf         # SmartPad variants
+├── docs/
+│   └── H3-OVERCLOCK.md         # Overclock documentation
 ├── userpatches/
-│   ├── customize-image.sh   # Image customization script
-│   └── overlay/             # Files copied to image
-│       ├── smartpi-config.txt
-│       ├── smartpi-firstboot.sh
-│       └── smartpi-firstboot.service
+│   ├── customize-image.sh      # Image customization script
+│   ├── kernel/archive/sunxi-6.18/
+│   │   └── 0001-...-overclock-opp.patch  # H3 1368 MHz OC patch
+│   └── overlay/                # Files copied to image
 └── README.md
 ```
 
