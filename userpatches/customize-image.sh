@@ -33,13 +33,10 @@ Main() {
     # installFirstBootConfig
 
     case "${BOARD}" in
-        smartpad)
-            rotateConsole
-            rotateScreen
-            rotateTouch
-            disableDPMS
-            installRotationScript
+        smartpi1)
+            installSmartpadDetection
             if [[ "${BUILD_DESKTOP}" = "yes" ]]; then
+                installRotationScript
                 patchLightdm
                 copyOnboardConf
                 patchOnboardAutostart
@@ -49,47 +46,28 @@ Main() {
     esac
 }
 
-rotateConsole() {
-    local bootcfg="/boot/armbianEnv.txt"
-    echo "Rotate tty console by default ..."
-    echo "extraargs=fbcon=rotate:2" >> "${bootcfg}"
-    echo "Current configuration (${bootcfg}):"
-    cat "${bootcfg}"
-    echo "Rotate tty console by default ... done!"
-}
+installSmartpadDetection() {
+    # The SmartPad is a SmartPi One fitted with a 4.3" 800x480 HDMI touchscreen
+    # mounted upside-down. Rotation is decided at runtime by detecting that
+    # screen (resolution + touchscreen), so a single image works on both a
+    # bare SmartPi One (normal monitor) and a SmartPad.
+    echo "Install SmartPad screen detection + console rotation ..."
 
-rotateScreen() {
-    local src="/tmp/overlay/02-smartpad-rotate-screen.conf"
-    local dest="/etc/X11/xorg.conf.d/"
-    echo "Install rotated screen configuration ..."
-    cp -v "${src}" "${dest}"
-    echo "DEBUG:"
-    ls -l "${dest}"
-    echo "Install rotated screen configuration ... [DONE]"
-}
+    cp -v /tmp/overlay/smartpad-detect.sh /usr/local/bin/smartpad-detect.sh
+    chmod 755 /usr/local/bin/smartpad-detect.sh
 
-rotateTouch() {
-    local src="/tmp/overlay/03-smartpad-rotate-touch.conf"
-    local dest="/etc/X11/xorg.conf.d/"
-    echo "Install rotated touch configuration ..."
-    cp -v "${src}" "${dest}"
-    echo "DEBUG:"
-    ls -l "${dest}"
-    echo "Install rotated touch configuration ... [DONE]"
-}
+    cp -v /tmp/overlay/smartpad-console-rotate.sh /usr/local/bin/smartpad-console-rotate.sh
+    chmod 755 /usr/local/bin/smartpad-console-rotate.sh
 
-disableDPMS() {
-    local src="/tmp/overlay/04-smartpad-disable-dpms.conf"
-    local dest="/etc/X11/xorg.conf.d/"
-    echo "Disable DPMS power management ..."
-    cp -v "${src}" "${dest}"
-    echo "DEBUG:"
-    ls -l "${dest}"
-    echo "Disable DPMS power management ... [DONE]"
+    cp -v /tmp/overlay/smartpad-console-rotate.service /etc/systemd/system/smartpad-console-rotate.service
+    chmod 644 /etc/systemd/system/smartpad-console-rotate.service
+    systemctl enable smartpad-console-rotate.service
+
+    echo "Install SmartPad screen detection + console rotation ... [DONE]"
 }
 
 installRotationScript() {
-    # Install xrandr-based rotation script for Debian 12/13 compatibility
+    # Install xrandr-based rotation script (gated on SmartPad screen detection)
     echo "Installing SmartPad rotation script ..."
 
     # Install the rotation script
@@ -141,7 +119,13 @@ copyOnboardConf() {
 patchOnboardAutostart() {
     local conf="/etc/xdg/autostart/onboard-autostart.desktop"
     echo "Patch Onboard Autostart file ..."
-    sed -i '/OnlyShowIn/s/^/# /' "${conf}"
+    if [[ -f "${conf}" ]]; then
+        sed -i '/OnlyShowIn/s/^/# /' "${conf}"
+        # Start the on-screen keyboard only when the SmartPad touchscreen is present
+        sed -i 's|^Exec=.*|Exec=sh -c "/usr/local/bin/smartpad-detect.sh \&\& exec onboard"|' "${conf}"
+    else
+        echo "WARNING: ${conf} not found (is the onboard package installed?)"
+    fi
     echo "Patch Onboard Autostart file ... [DONE]"
 }
 

@@ -17,7 +17,7 @@ Custom Armbian image builder for SmartPi devices by **[Yumi Lab](https://www.yum
 
 - **Kernel headers pre-installed** — allows compiling and loading kernel modules directly on the board (WiFi drivers, GPIO drivers, DKMS modules, etc.) without needing a cross-compilation setup
 - **H3 CPU overclock to 1368 MHz** (since v1.8.0) — +5.5% over stock 1296 MHz, managed automatically by the cpufreq governor
-- **18 images** built automatically for 2 boards x 5 distros x server/desktop
+- **9 images** built automatically for 5 distros x server/desktop (single `smartpi1` board, also used on SmartPad)
 
 ## Table of Contents
 
@@ -54,12 +54,14 @@ SmartPi-armbian is a custom image builder for SmartPi devices, leveraging the Ar
 ### SmartPad
 ![SmartPad](https://img.shields.io/badge/SmartPad-Allwinner_H3-orange?style=for-the-badge&logo=arm&logoColor=white)
 
+The SmartPad is a SmartPi One fitted with a 4.3" 800x480 HDMI touchscreen — it uses the **same `smartpi1` images**. The SmartPad screen is detected at runtime (800x480 resolution + touchscreen present) and the 180° rotation is applied automatically; on a normal HDMI monitor the display stays in its normal orientation.
+
 | Specification | Value |
 |---------------|-------|
 | **SoC** | Allwinner H3 quad-core |
 | **RAM** | 1GB |
-| **Display** | Integrated touchscreen (180° rotated) |
-| **Extras** | On-screen keyboard (Onboard) |
+| **Display** | 4.3" 800x480 touchscreen (auto-detected, auto-rotated 180°) |
+| **Extras** | On-screen keyboard (Onboard, shown only when a touchscreen is detected) |
 | **Variants** | 🖥️ Server / 🖼️ Desktop |
 
 ## Supported Distributions
@@ -113,7 +115,7 @@ All images include the distribution name and version for easy identification.
 ```
 **Examples:**
 - `Yumi-smartpi1-bookworm-debian12-server-2026-02-02-1234.img.xz`
-- `Yumi-smartpad-noble-ubuntu24.04-desktop-2026-02-02-1234.img.xz`
+- `Yumi-smartpi1-noble-ubuntu24.04-desktop-2026-02-02-1234.img.xz`
 
 ## First-Boot Configuration
 
@@ -167,16 +169,15 @@ The build process is fully automated using GitHub Actions.
 ```
 SmartPi-armbian/
 ├── .github/workflows/
-│   ├── BuildImages.yml         # Main build workflow (18 images)
+│   ├── BuildImages.yml         # Main build workflow (9 images)
 │   └── Release.yml             # Release workflow
 ├── actions/
 │   └── build-image/            # Armbian build action
 ├── boards/
-│   └── smartpad.wip            # H3 board config (shared by SmartPi1 & SmartPad)
+│   └── smartpi1.wip            # H3 board config (SmartPi One & SmartPad)
 ├── configs/
 │   ├── config-default.conf     # Default build settings
-│   ├── smartpi1-*.conf         # SmartPi One variants
-│   └── smartpad-*.conf         # SmartPad variants
+│   └── smartpi1-*.conf         # SmartPi One variants (also used on SmartPad)
 ├── docs/
 │   └── H3-OVERCLOCK.md         # Overclock documentation
 ├── userpatches/

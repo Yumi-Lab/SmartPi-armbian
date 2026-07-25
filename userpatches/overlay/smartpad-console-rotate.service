@@ -1,0 +1,10 @@
+[Unit]
+Description=Rotate tty console 180 degrees when SmartPad screen is detected
+After=systemd-udevd.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/smartpad-console-rotate.sh
+
+[Install]
+WantedBy=multi-user.target
