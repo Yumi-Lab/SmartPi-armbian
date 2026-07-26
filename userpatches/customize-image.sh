@@ -35,6 +35,7 @@ Main() {
     case "${BOARD}" in
         smartpi1)
             installSmartpadDetection
+            installBootLogo
             if [[ "${BUILD_DESKTOP}" = "yes" ]]; then
                 installRotationScript
                 patchLightdm
@@ -64,6 +65,15 @@ installSmartpadDetection() {
     systemctl enable smartpad-console-rotate.service
 
     echo "Install SmartPad screen detection + console rotation ... [DONE]"
+}
+
+installBootLogo() {
+    # U-Boot displays /boot/boot.bmp at power-on (CONFIG_CMD_BMP + custom
+    # bootscripts/boot-sunxi.cmd). The file lives on the FAT boot partition,
+    # so it can be replaced or deleted from any computer.
+    echo "Install boot logo ..."
+    cp -v /tmp/overlay/boot.bmp /boot/boot.bmp
+    echo "Install boot logo ... [DONE]"
 }
 
 installRotationScript() {
