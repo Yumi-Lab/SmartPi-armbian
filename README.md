@@ -17,7 +17,7 @@ Custom Armbian image builder for SmartPi devices by **[Yumi Lab](https://www.yum
 
 - **Kernel headers pre-installed** — allows compiling and loading kernel modules directly on the board (WiFi drivers, GPIO drivers, DKMS modules, etc.) without needing a cross-compilation setup
 - **H3 CPU overclock to 1368 MHz** (since v1.8.0) — +5.5% over stock 1296 MHz, managed automatically by the cpufreq governor
-- **9 images** built automatically for 5 distros x server/desktop (single `smartpi1` board, also used on SmartPad)
+- **8 images** built automatically for 5 distros (single `smartpi1` board, also used on SmartPad; jammy is server-only)
 
 ## Table of Contents
 
@@ -80,7 +80,7 @@ The SmartPad is a SmartPi One fitted with a 4.3" 800x480 HDMI touchscreen — it
 
 | Codename | Version | Status |
 |----------|---------|--------|
-| ![Jammy](https://img.shields.io/badge/Jammy-22.04_LTS-E95420?logo=ubuntu&logoColor=white) | Ubuntu 22.04 | LTS |
+| ![Jammy](https://img.shields.io/badge/Jammy-22.04_LTS-E95420?logo=ubuntu&logoColor=white) | Ubuntu 22.04 | LTS (server only) |
 | ![Noble](https://img.shields.io/badge/Noble-24.04_LTS-E95420?logo=ubuntu&logoColor=white) | Ubuntu 24.04 | **Current LTS** |
 
 ## H3 CPU Overclock
@@ -169,7 +169,7 @@ The build process is fully automated using GitHub Actions.
 ```
 SmartPi-armbian/
 ├── .github/workflows/
-│   ├── BuildImages.yml         # Main build workflow (9 images)
+│   ├── BuildImages.yml         # Main build workflow (8 images)
 │   └── Release.yml             # Release workflow
 ├── actions/
 │   └── build-image/            # Armbian build action
