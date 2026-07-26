@@ -36,6 +36,7 @@ Main() {
         smartpi1)
             installSmartpadDetection
             installUsbGadgetNet
+            disableSimpledrm
             if [[ "${BUILD_DESKTOP}" = "yes" ]]; then
                 installRotationScript
                 patchLightdm
@@ -65,6 +66,17 @@ installSmartpadDetection() {
     systemctl enable smartpad-console-rotate.service
 
     echo "Install SmartPad screen detection + console rotation ... [DONE]"
+}
+
+disableSimpledrm() {
+    # U-Boot hands the kernel a simple-framebuffer node, and simpledrm binds to
+    # it alongside the native sun4i-drm driver. Both framebuffers then exist and
+    # the console can end up drawn into the one that is no longer scanned out,
+    # leaving a black screen after boot (verified on hardware). sun4i-drm always
+    # drives this board, so the fallback driver is not needed.
+    echo "Disable simpledrm (conflicts with sun4i-drm) ..."
+    echo "blacklist simpledrm" > /etc/modprobe.d/smartpi-no-simpledrm.conf
+    echo "Disable simpledrm ... [DONE]"
 }
 
 installUsbGadgetNet() {
