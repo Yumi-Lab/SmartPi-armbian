@@ -6,3 +6,14 @@ MODULES_LEGACY="g_ncm"
 MODULES_CURRENT="g_ncm"
 SERIALCON="ttyS0"
 KERNEL_TARGET="legacy,current,edge"
+
+# Replace U-Boot's built-in logo with the Yumi one. It is drawn the instant the
+# video device is probed — before any file is read from the SD card — so it
+# appears immediately, unlike /boot/boot.bmp which the boot script displays
+# once it has been loaded.
+function pre_config_uboot_target__smartpi1_yumi_logo() {
+	declare logo="${SRC}/userpatches/overlay/u-boot-logo.bmp"
+	[[ -f "${logo}" ]] || { display_alert "u-boot for ${BOARD}" "Yumi logo not found, keeping the default" "wrn"; return 0; }
+	display_alert "u-boot for ${BOARD}" "installing the Yumi boot logo" "info"
+	run_host_command_logged cp -v "${logo}" tools/logos/u-boot_logo.bmp
+}
