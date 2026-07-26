@@ -36,6 +36,7 @@ Main() {
         smartpi1)
             installSmartpadDetection
             installBootLogo
+            installUsbGadgetNet
             if [[ "${BUILD_DESKTOP}" = "yes" ]]; then
                 installRotationScript
                 patchLightdm
@@ -74,6 +75,19 @@ installBootLogo() {
     echo "Install boot logo ..."
     cp -v /tmp/overlay/boot.bmp /boot/boot.bmp
     echo "Install boot logo ... [DONE]"
+}
+
+installUsbGadgetNet() {
+    # USB0 (OTG) runs as a network gadget (g_ether, enabled in the device
+    # tree): plugging the OTG port into a computer gives SSH access at
+    # 172.22.1.1 without Ethernet.
+    echo "Install USB gadget network ..."
+    cp -v /tmp/overlay/usb-gadget-net.sh /usr/local/bin/usb-gadget-net.sh
+    chmod 755 /usr/local/bin/usb-gadget-net.sh
+    cp -v /tmp/overlay/usb-gadget-net.service /etc/systemd/system/usb-gadget-net.service
+    chmod 644 /etc/systemd/system/usb-gadget-net.service
+    systemctl enable usb-gadget-net.service
+    echo "Install USB gadget network ... [DONE]"
 }
 
 installRotationScript() {

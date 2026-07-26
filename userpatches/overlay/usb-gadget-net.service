@@ -1,0 +1,10 @@
+[Unit]
+Description=USB network gadget (SSH over the OTG port)
+After=systemd-modules-load.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/usb-gadget-net.sh
+
+[Install]
+WantedBy=multi-user.target

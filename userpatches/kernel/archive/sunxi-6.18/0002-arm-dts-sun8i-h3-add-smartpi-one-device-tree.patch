@@ -9,8 +9,8 @@ custom model and compatible strings.
 Signed-off-by: Nicolas Michaut <nicolas@yumilab.com>
 ---
  arch/arm/boot/dts/allwinner/Makefile              |   2 +
- arch/arm/boot/dts/allwinner/sun8i-h3-smartpi-one.dts | 100 ++++++++++++++++++
- 2 files changed, 102 insertions(+)
+ arch/arm/boot/dts/allwinner/sun8i-h3-smartpi-one.dts | 80 +++++++++++++++++
+ 2 files changed, 82 insertions(+)
  create mode 100644 arch/arm/boot/dts/allwinner/sun8i-h3-smartpi-one.dts
 
 diff --git a/arch/arm/boot/dts/allwinner/Makefile b/arch/arm/boot/dts/allwinner/Makefile
@@ -26,7 +26,7 @@ diff --git a/arch/arm/boot/dts/allwinner/sun8i-h3-smartpi-one.dts b/arch/arm/boo
 new file mode 100644
 --- /dev/null
 +++ b/arch/arm/boot/dts/allwinner/sun8i-h3-smartpi-one.dts
-@@ -0,0 +1,72 @@
+@@ -0,0 +1,79 @@
 +// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
 +/*
 + * Copyright (C) 2026 Yumi Lab <nicolas@yumilab.com>
@@ -97,6 +97,13 @@ new file mode 100644
 +};
 +
 +&ohci2 {
++	status = "okay";
++};
++
++/* USB0 (OTG) in peripheral mode: g_ether exposes a network gadget so the
++ * board is reachable over SSH from a computer plugged into the OTG port. */
++&usb_otg {
++	dr_mode = "peripheral";
 +	status = "okay";
 +};
 --
