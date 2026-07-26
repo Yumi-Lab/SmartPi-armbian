@@ -45,6 +45,18 @@ if test -e ${devtype} ${devnum} ${prefix}armbianEnv.txt; then
 	env import -t ${load_addr} ${filesize}
 fi
 
+# Yumi boot logo: display boot.bmp as early as possible, then send U-Boot
+# output to the serial console only so no text is drawn over it. Replace or
+# delete /boot/boot.bmp (FAT partition, readable from any computer) to change
+# or disable the logo.
+if test -e ${devtype} ${devnum} ${prefix}boot.bmp; then
+	if load ${devtype} ${devnum} ${load_addr} ${prefix}boot.bmp; then
+		bmp display ${load_addr} m m
+		setenv stdout serial
+		setenv stderr serial
+	fi
+fi
+
 # Delete the vendor's name from the fdtfile variable and record the result
 # after the file with the environment variables has been read
 if setexpr subfdt sub ${vendor}/ "" ${fdtfile};then
@@ -127,13 +139,6 @@ if test -e ${devtype} ${devnum} "${prefix}.next"; then
 			load ${devtype} ${devnum} ${load_addr} ${prefix}fixup.scr
 			echo "Applying user provided fixup script (fixup.scr)"
 			source ${load_addr}
-		fi
-	fi
-	# Yumi boot logo: displayed last so console output does not overwrite it.
-	# Replace or delete /boot/boot.bmp to change or disable it.
-	if test -e ${devtype} ${devnum} ${prefix}boot.bmp; then
-		if load ${devtype} ${devnum} ${load_addr} ${prefix}boot.bmp; then
-			bmp display ${load_addr} m m
 		fi
 	fi
 	bootz ${kernel_addr_r} ${ramdisk_addr_r} ${fdt_addr_r}
