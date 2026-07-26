@@ -7,7 +7,7 @@
 # SmartPi-armbian
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![Version](https://img.shields.io/badge/Version-1.8.0--rc1-green.svg)](https://github.com/Yumi-Lab/SmartPi-armbian/releases)
+[![Version](https://img.shields.io/badge/Version-1.8.0--rc2-green.svg)](https://github.com/Yumi-Lab/SmartPi-armbian/releases)
 [![Build Images](https://github.com/Yumi-Lab/SmartPi-armbian/actions/workflows/BuildImages.yml/badge.svg)](https://github.com/Yumi-Lab/SmartPi-armbian/actions/workflows/BuildImages.yml)
 [![Wiki](https://img.shields.io/badge/Wiki-Documentation-orange?logo=gitbook&logoColor=white)](https://wiki.yumi-lab.com)
 
@@ -17,6 +17,8 @@ Custom Armbian image builder for SmartPi devices by **[Yumi Lab](https://www.yum
 
 - **Kernel headers pre-installed** — allows compiling and loading kernel modules directly on the board (WiFi drivers, GPIO drivers, DKMS modules, etc.) without needing a cross-compilation setup
 - **H3 CPU overclock to 1368 MHz** (since v1.8.0) — +5.5% over stock 1296 MHz, managed automatically by the cpufreq governor
+- **SSH over the USB OTG port** (since v1.8.0) — one cable powers the board and provides network access, no Ethernet or WiFi needed
+- **Customizable boot logo** (since v1.8.0) — U-Boot displays `boot.bmp` from the FAT boot partition; replace it from any computer
 - **8 images** built automatically for 5 distros (single `smartpi1` board, also used on SmartPad; jammy is server-only)
 
 ## Table of Contents
@@ -49,7 +51,7 @@ SmartPi-armbian is a custom image builder for SmartPi devices, leveraging the Ar
 |---------------|-------|
 | **SoC** | Allwinner H3 quad-core |
 | **RAM** | 1GB |
-| **Variants** | 🖥️ Server / 🖼️ Desktop |
+| **Variants** | Server / Desktop |
 
 ### SmartPad
 ![SmartPad](https://img.shields.io/badge/SmartPad-Allwinner_H3-orange?style=for-the-badge&logo=arm&logoColor=white)
@@ -62,7 +64,7 @@ The SmartPad is a SmartPi One fitted with a 4.3" 800x480 HDMI touchscreen — it
 | **RAM** | 1GB |
 | **Display** | 4.3" 800x480 touchscreen (auto-detected, auto-rotated 180°) |
 | **Extras** | On-screen keyboard (Onboard, shown only when a touchscreen is detected) |
-| **Variants** | 🖥️ Server / 🖼️ Desktop |
+| **Variants** | Server / Desktop |
 
 ## Supported Distributions
 
@@ -130,6 +132,26 @@ kernel):
 wget https://github.com/Yumi-Lab/SmartPi-armbian/releases/latest/download/linux-headers-current-sunxi_<version>.deb
 sudo dpkg -i linux-headers-current-sunxi_<version>.deb
 ```
+
+## SSH over USB (OTG)
+
+The OTG port runs as a USB network gadget, so a single cable to a computer both
+powers the board and carries the network. The board answers at `172.22.1.1`;
+set `172.22.1.2/24` on the computer side, then:
+
+```bash
+ssh root@172.22.1.1
+```
+
+Note that unplugging the cable also cuts power. When running sustained
+workloads at the 1368 MHz overclock, prefer a dedicated 5V/2A supply — a
+computer's USB port may not deliver enough current.
+
+## Boot Logo
+
+U-Boot displays `/boot/boot.bmp` at power-on. The boot partition is FAT32, so
+the file can be replaced or deleted from any computer. Use an uncompressed
+24-bit BMP no larger than the display resolution.
 
 ## First-Boot Configuration
 
