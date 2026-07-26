@@ -117,6 +117,20 @@ All images include the distribution name and version for easy identification.
 - `Yumi-smartpi1-bookworm-debian12-server-2026-02-02-1234.img.xz`
 - `Yumi-smartpi1-noble-ubuntu24.04-desktop-2026-02-02-1234.img.xz`
 
+## Kernel Packages (DKMS)
+
+Each release also ships the exact kernel/U-Boot `.deb` packages matching the
+images (`linux-image`, `linux-headers`, `linux-dtb`, `linux-u-boot`), for both
+kernel branches (`current` for Debian 12/13 & Ubuntu, `legacy` for Debian 11).
+To build DKMS modules on the device, install the headers **from the release**,
+not from apt.armbian.com (whose generic builds do not match this custom
+kernel):
+
+```bash
+wget https://github.com/Yumi-Lab/SmartPi-armbian/releases/latest/download/linux-headers-current-sunxi_<version>.deb
+sudo dpkg -i linux-headers-current-sunxi_<version>.deb
+```
+
 ## First-Boot Configuration
 
 > **Note:** The first-boot configuration system (`smartpi-config.txt`) is currently disabled and under development. It will be re-enabled in a future release.

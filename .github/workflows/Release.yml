@@ -67,10 +67,11 @@ jobs:
           while IFS='|' read url name; do
             echo "→ $name"
             curl -sL -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "$url" -o artifact.zip
-            unzip -o artifact.zip "$name"
+            mkdir -p extracted
+            unzip -o artifact.zip -d extracted
             rm artifact.zip
-            gh release upload "${{ github.event.inputs.version }}" "$name" --clobber --repo "${{ github.repository }}"
-            rm -f "$name"
+            gh release upload "${{ github.event.inputs.version }}" $(find extracted -type f) --clobber --repo "${{ github.repository }}"
+            rm -rf extracted
             echo "✅ $name"
           done
         env:

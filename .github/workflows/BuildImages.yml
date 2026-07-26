@@ -125,3 +125,25 @@ jobs:
         with:
           name: ${{ steps.image_name.outputs.image_name }}.txt
           path: ${{ github.workspace }}/build/output/images/${{ steps.image_name.outputs.image_name }}.txt
+
+      # Publish the exact kernel/U-Boot packages matching the shipped images,
+      # so users can (re)install headers for DKMS builds — apt.armbian.com
+      # serves generic builds that do not match our custom kernel.
+      # Kernel debs are identical across releases of the same branch: upload
+      # them from a single job per kernel branch (current + legacy).
+      - name: List built packages
+        if: matrix.configfile == 'smartpi1-trixie-server' || matrix.configfile == 'smartpi1-bullseye-server'
+        run: |
+          find ${{ github.workspace }}/build/output/debs -name "*.deb" | sort
+
+      - name: Upload kernel and U-Boot packages
+        if: matrix.configfile == 'smartpi1-trixie-server' || matrix.configfile == 'smartpi1-bullseye-server'
+        uses: actions/upload-artifact@v4.3.0
+        with:
+          name: ${{ matrix.configfile == 'smartpi1-bullseye-server' && 'kernel-debs-legacy' || 'kernel-debs-current' }}
+          if-no-files-found: warn
+          path: |
+            ${{ github.workspace }}/build/output/debs/**/linux-image-*.deb
+            ${{ github.workspace }}/build/output/debs/**/linux-headers-*.deb
+            ${{ github.workspace }}/build/output/debs/**/linux-dtb-*.deb
+            ${{ github.workspace }}/build/output/debs/**/linux-u-boot-*.deb
