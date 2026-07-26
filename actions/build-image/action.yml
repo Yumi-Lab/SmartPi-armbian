@@ -97,6 +97,12 @@ runs:
 
     - name: Build Image
       shell: bash
+      env:
+        # CI runners have no tty, so armbian's docker launcher forwards an empty
+        # COLUMNS into the container; it leaks into the rootfs chroot and crashes
+        # mksh-based maintainer scripts (rng-tools preinst on bullseye) with
+        # "COLUMNS: bad number". Give it a real value so the forward stays valid.
+        COLUMNS: "120"
       run: |
         cd ./build
         ./compile.sh settings
