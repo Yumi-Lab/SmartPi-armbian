@@ -21,11 +21,15 @@ has_touchscreen() {
 }
 
 has_smartpad_resolution() {
-    # Preferred (first) mode of any connected DRM output
+    # 800x480 anywhere in the mode list of a connected DRM output. Not just the
+    # first entry: the video= mode forced on the kernel command line (720p, for
+    # 4K screen compatibility) is inserted at the head of the list, but the
+    # panel's native 800x480 stays in it. No regular monitor or TV advertises
+    # 800x480, so scanning the whole list is just as discriminating.
     for conn in /sys/class/drm/card*-*; do
         [ -f "${conn}/status" ] || continue
         [ "$(cat "${conn}/status")" = "connected" ] || continue
-        head -n1 "${conn}/modes" 2>/dev/null | grep -q "^${SMARTPAD_RES}$" && return 0
+        grep -q "^${SMARTPAD_RES}$" "${conn}/modes" 2>/dev/null && return 0
     done
     # Fallback when no DRM connector info is available: framebuffer size
     if [ -f /sys/class/graphics/fb0/virtual_size ]; then

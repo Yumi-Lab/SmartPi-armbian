@@ -37,6 +37,7 @@ Main() {
             installSmartpadDetection
             installUsbGadgetNet
             disableSimpledrm
+            forceUniversalVideoMode
             if [[ "${BUILD_DESKTOP}" = "yes" ]]; then
                 installRotationScript
                 patchLightdm
@@ -87,6 +88,25 @@ disableSimpledrm() {
     fi
     grep "^extraargs=" "${bootcfg}"
     echo "Disable simpledrm ... [DONE]"
+}
+
+forceUniversalVideoMode() {
+    # The H3 tops out at 4K@30 (HDMI 1.4): letting the kernel negotiate with a
+    # 4K UHD screen ends badly (unsupported 4K@60 preferred mode, or a 4K@30
+    # framebuffer the Mali-400 cannot drive). Forcing 1280x720@60 guarantees a
+    # picture on every screen — 4K UHD included, they all accept and upscale
+    # 720p — and is the mode RetroMi already ships with for the same reason.
+    # The forced mode lands FIRST in the DRM mode list, which is why
+    # smartpad-detect.sh scans the whole list instead of the first entry.
+    echo "Force universal 720p video mode (4K screen compatibility) ..."
+    local bootcfg="/boot/armbianEnv.txt"
+    if grep -q "^extraargs=" "${bootcfg}" 2>/dev/null; then
+        sed -i "s|^extraargs=\(.*\)|extraargs=\1 video=HDMI-A-1:1280x720@60|" "${bootcfg}"
+    else
+        echo "extraargs=video=HDMI-A-1:1280x720@60" >> "${bootcfg}"
+    fi
+    grep "^extraargs=" "${bootcfg}"
+    echo "Force universal 720p video mode ... [DONE]"
 }
 
 installUsbGadgetNet() {
