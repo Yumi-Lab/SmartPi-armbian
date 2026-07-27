@@ -29,6 +29,7 @@ Custom Armbian image builder for SmartPi devices by **[Yumi Lab](https://www.yum
 - [H3 CPU Overclock](#h3-cpu-overclock)
 - [Image Naming Convention](#image-naming-convention)
 - [First-Boot Configuration](#first-boot-configuration)
+- [Raspberry Pi Imager](#raspberry-pi-imager)
 - [Getting Started](#getting-started)
 - [Usage](#usage)
 - [Project Structure](#project-structure)
@@ -158,6 +159,16 @@ the file can be replaced or deleted from any computer. Use an uncompressed
 > **Note:** The first-boot configuration system (`smartpi-config.txt`) is currently disabled and under development. It will be re-enabled in a future release.
 
 At first boot, Armbian will prompt you to create a root password and a first user account. For headless setup, connect via serial console or SSH (root login with no password on first connection) and follow the interactive setup.
+
+## Raspberry Pi Imager
+
+The images can be browsed and flashed with Raspberry Pi Imager through a custom repository (the official catalog only lists operating systems for Raspberry Pi hardware). Start the Imager with:
+
+```bash
+rpi-imager --repo https://yumi-lab.github.io/SmartPi-armbian/os_list.json
+```
+
+On Windows or macOS, create a shortcut to the Raspberry Pi Imager executable with the same `--repo` argument. The catalog is regenerated automatically for every release by the `PublishImagerRepo` workflow.
 
 ## Getting Started
 

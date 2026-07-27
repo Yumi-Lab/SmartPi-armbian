@@ -76,3 +76,16 @@ jobs:
           done
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-imager-repo:
+    name: Mettre a jour le depot Raspberry Pi Imager
+    runs-on: ubuntu-latest
+    needs: upload-files
+    steps:
+      - name: Dispatch PublishImagerRepo
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run PublishImagerRepo.yml \
+            --repo "${{ github.repository }}" \
+            -f version="${{ github.event.inputs.version }}"

@@ -1,0 +1,86 @@
+name: Publish Imager repository
+
+# Generates the Raspberry Pi Imager custom-repository JSON (os_list.json) for
+# a given release and publishes it on the gh-pages branch. Users then point
+# the Imager at it:
+#   rpi-imager --repo https://yumi-lab.github.io/SmartPi-armbian/os_list.json
+#
+# Dispatched automatically at the end of Release.yml, or manually with a
+# version tag.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release tag to publish (ex: v1.8.0-rc4)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Generate os_list.json for ${{ github.event.inputs.version }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Generate os_list.json
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ github.event.inputs.version }}
+        run: |
+          set -e
+          REPO="${{ github.repository }}"
+          RELEASE_DATE=$(gh release view "$VERSION" --repo "$REPO" --json publishedAt --jq '.publishedAt[0:10]')
+          mkdir -p out work
+          echo '[]' > entries.json
+
+          gh release view "$VERSION" --repo "$REPO" --json assets \
+            --jq '.assets[] | select(.name | endswith(".img.xz")) | .name + "|" + (.size | tostring)' \
+          | sort | while IFS='|' read -r NAME XZSIZE; do
+            URL="https://github.com/${REPO}/releases/download/${VERSION}/${NAME}"
+            echo "== ${NAME}"
+            curl -sfL "$URL" -o work/img.xz
+            EXTRACT_SIZE=$(xz -l --robot work/img.xz | awk '$1=="totals"{print $5}')
+            EXTRACT_SHA=$(xz -dc work/img.xz | sha256sum | cut -d' ' -f1)
+            rm -f work/img.xz
+
+            # Yumi-smartpi1-trixie-debian13-server-<date>.img.xz -> readable name
+            BASE="${NAME%.img.xz}"
+            DISTRO=$(echo "$BASE" | sed -E 's/^Yumi-smartpi1-([a-z]+)-([a-z0-9.]+)-(server|desktop|dietpi)-.*/\1 (\2)/')
+            FLAVOR=$(echo "$BASE" | sed -E 's/^Yumi-smartpi1-[a-z]+-[a-z0-9.]+-(server|desktop|dietpi)-.*/\1/')
+            TITLE="SmartPi One ${DISTRO} ${FLAVOR} ${VERSION}"
+
+            jq --arg name "$TITLE" \
+               --arg desc "Yumi SmartPi One image, ${DISTRO} ${FLAVOR}. Instant boot logo, works on any screen up to 4K UHD, SSH over USB." \
+               --arg url "$URL" \
+               --arg date "$RELEASE_DATE" \
+               --argjson dl "$XZSIZE" \
+               --argjson ex "$EXTRACT_SIZE" \
+               --arg sha "$EXTRACT_SHA" \
+               '. += [{name: $name, description: $desc, url: $url, release_date: $date, image_download_size: $dl, extract_size: $ex, extract_sha256: $sha, init_format: ""}]' \
+               entries.json > entries.tmp && mv entries.tmp entries.json
+          done
+
+          jq '{os_list: .}' entries.json > out/os_list.json
+          cat out/os_list.json
+
+      - name: Publish to gh-pages
+        run: |
+          set -e
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          if git ls-remote --exit-code origin gh-pages >/dev/null 2>&1; then
+            git fetch origin gh-pages
+            git worktree add pages origin/gh-pages
+          else
+            git worktree add --orphan -b gh-pages pages
+          fi
+          cp out/os_list.json pages/os_list.json
+          cd pages
+          git add os_list.json
+          git commit -m "imager repo: ${{ github.event.inputs.version }}" || echo "nothing to commit"
+          git push origin HEAD:gh-pages
