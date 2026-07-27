@@ -74,8 +74,18 @@ disableSimpledrm() {
     # the console can end up drawn into the one that is no longer scanned out,
     # leaving a black screen after boot (verified on hardware). sun4i-drm always
     # drives this board, so the fallback driver is not needed.
+    # Blocked on the kernel command line rather than through modprobe.d alone:
+    # updating the initramfs fails on this FAT boot partition (no symlinks), so
+    # a modprobe.d rule may never reach early boot.
     echo "Disable simpledrm (conflicts with sun4i-drm) ..."
     echo "blacklist simpledrm" > /etc/modprobe.d/smartpi-no-simpledrm.conf
+    local bootcfg="/boot/armbianEnv.txt"
+    if grep -q "^extraargs=" "${bootcfg}" 2>/dev/null; then
+        sed -i "s|^extraargs=\(.*\)|extraargs=\1 module_blacklist=simpledrm|" "${bootcfg}"
+    else
+        echo "extraargs=module_blacklist=simpledrm" >> "${bootcfg}"
+    fi
+    grep "^extraargs=" "${bootcfg}"
     echo "Disable simpledrm ... [DONE]"
 }
 
