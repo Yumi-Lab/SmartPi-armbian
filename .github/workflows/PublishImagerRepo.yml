@@ -70,19 +70,19 @@ jobs:
             imager: {
               devices: [
                 {
-                  name: "SmartPi One",
+                  name: "YUMi SmartPi One",
                   tags: ["smartpi-one"],
                   icon: $icon,
-                  description: "Yumi Lab SmartPi One (Allwinner H3, 1 GB RAM)",
+                  description: "Single Board Computer",
                   matching_type: "inclusive",
                   default: true,
                   capabilities: []
                 },
                 {
-                  name: "SmartPad",
+                  name: "YUMi SmartPad",
                   tags: ["smartpad"],
                   icon: $icon,
-                  description: "Yumi Lab SmartPad (SmartPi One with a 4.3 inch 800x480 touchscreen)",
+                  description: "Includes a capacitive 800x480 touch screen",
                   matching_type: "inclusive",
                   capabilities: []
                 }
