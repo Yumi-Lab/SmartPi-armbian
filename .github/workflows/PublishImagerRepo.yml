@@ -50,8 +50,22 @@ jobs:
             case "$1" in
               *-dietpi-*)                                   echo "${PAGES}/icons/dietpi.svg" ;;
               *-jammy-*|*-noble-*|*-resolute-*)             echo "${PAGES}/icons/ubuntu.svg" ;;
-              *-bullseye-*|*-bookworm-*|*-trixie-*|*-forky-*|*-sid-*) echo "${PAGES}/icons/debian.png" ;;
+              *-bullseye-*|*-bookworm-*|*-trixie-*|*-forky-*|*-sid-*) echo "${PAGES}/icons/debian.svg" ;;
               *)                                            echo "${PAGES}/icons/yumi-icon.png" ;;
+            esac
+          }
+
+          pretty_release() {
+            case "$1" in
+              bullseye) echo "Debian 11 (Bullseye)" ;;
+              bookworm) echo "Debian 12 (Bookworm)" ;;
+              trixie)   echo "Debian 13 (Trixie)" ;;
+              forky)    echo "Debian 14 (Forky, testing)" ;;
+              sid)      echo "Debian Unstable (Sid)" ;;
+              jammy)    echo "Ubuntu 22.04 LTS (Jammy)" ;;
+              noble)    echo "Ubuntu 24.04 LTS (Noble)" ;;
+              resolute) echo "Ubuntu 26.04 LTS (Resolute)" ;;
+              *)        echo "$1" ;;
             esac
           }
 
@@ -85,16 +99,23 @@ jobs:
               fi
 
               # Yumi-smartpi1-trixie-debian13-server-<date>.img.xz -> readable name
-              local BASE DISTRO FLAVOR TITLE DESC
+              local BASE CODENAME PRETTY FLAVOR TITLE DESC
               BASE="${NAME%.img.xz}"
-              DISTRO=$(echo "$BASE" | sed -E 's/^Yumi-smartpi1-([a-z]+)-([a-z0-9.]+)-(server|desktop|dietpi|cloudinit)-.*/\1 (\2)/')
+              CODENAME=$(echo "$BASE" | sed -E 's/^Yumi-smartpi1-([a-z]+)-.*/\1/')
+              PRETTY=$(pretty_release "$CODENAME")
               FLAVOR=$(echo "$BASE" | sed -E 's/^Yumi-smartpi1-[a-z]+-[a-z0-9.]+-(server|desktop|dietpi|cloudinit)-.*/\1/')
-              if [[ "$FLAVOR" == "dietpi" ]]; then
-                TITLE="YUMi SmartPi One DietPi ${VERSION}"
-                DESC="DietPi for the YUMi SmartPi One, ${DISTRO} base. Lightweight, headless-friendly, WiFi tools preinstalled."
+              case "$FLAVOR" in
+                server)    FLAVOR="Server" ;;
+                desktop)   FLAVOR="Desktop (XFCE)" ;;
+                cloudinit) FLAVOR="Server (cloud-init)" ;;
+                dietpi)    FLAVOR="DietPi" ;;
+              esac
+              if [[ "$FLAVOR" == "DietPi" ]]; then
+                TITLE="DietPi ${VERSION}"
+                DESC="DietPi for the YUMi SmartPi One, ${PRETTY} base. Lightweight, headless-friendly, WiFi tools preinstalled."
               else
-                TITLE="YUMi SmartPi One ${DISTRO} ${FLAVOR} ${VERSION}"
-                DESC="Armbian ${DISTRO} ${FLAVOR} for the YUMi SmartPi One. Instant boot logo, works on any screen up to 4K UHD, SSH over USB."
+                TITLE="${PRETTY} ${FLAVOR} ${VERSION}"
+                DESC="Armbian ${PRETTY} ${FLAVOR} for the YUMi SmartPi One. Instant boot logo, works on any screen up to 4K UHD, SSH over USB."
               fi
 
               jq --arg name "$TITLE" \
@@ -142,7 +163,7 @@ jobs:
             os_list: .
           }' entries.json > out/os_list.json
           mkdir -p out/icons
-          cp assets/imager/yumi-icon.png assets/imager/dietpi.svg assets/imager/ubuntu.svg assets/imager/debian.png out/icons/
+          cp assets/imager/yumi-icon.png assets/imager/dietpi.svg assets/imager/ubuntu.svg assets/imager/debian.svg assets/imager/debian.png out/icons/
           jq -r '.os_list[] | .name + " | " + .icon' out/os_list.json
 
       - name: Publish to gh-pages
