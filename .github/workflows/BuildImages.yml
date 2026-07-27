@@ -83,8 +83,10 @@ jobs:
             -e 's/bullseye-/bullseye-debian11-/' \
             -e 's/bookworm-/bookworm-debian12-/' \
             -e 's/trixie-/trixie-debian13-/' \
+            -e 's/forky-/forky-debian14-/' \
             -e 's/jammy-/jammy-ubuntu22.04-/' \
-            -e 's/noble-/noble-ubuntu24.04-/')
+            -e 's/noble-/noble-ubuntu24.04-/' \
+            -e 's/resolute-/resolute-ubuntu26.04-/')
           img_name="${VENDOR}-${configfile}-${{ needs.setup.outputs.time }}"
           echo "image_name=${img_name}" >> $GITHUB_OUTPUT
           echo "::group::Image name"
