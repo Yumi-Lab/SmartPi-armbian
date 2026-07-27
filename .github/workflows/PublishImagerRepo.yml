@@ -5,6 +5,12 @@ name: Publish Imager repository
 # the Imager at it:
 #   rpi-imager --repo https://yumi-lab.github.io/SmartPi-armbian/os_list.json
 #
+# Includes both the SmartPi-armbian images and the DietPi image converted
+# from the same tag (Yumi-Lab/DietPi-SmartPi release). Checksums already
+# present in the published catalog are reused, so a catalog-only change
+# (names, icons, devices) redeploys in seconds instead of re-downloading
+# every image.
+#
 # Dispatched automatically at the end of Release.yml, or manually with a
 # version tag.
 
@@ -33,40 +39,85 @@ jobs:
           VERSION: ${{ github.event.inputs.version }}
         run: |
           set -e
-          REPO="${{ github.repository }}"
-          RELEASE_DATE=$(gh release view "$VERSION" --repo "$REPO" --json publishedAt --jq '.publishedAt[0:10]')
+          PAGES="https://yumi-lab.github.io/SmartPi-armbian"
           mkdir -p out work
           echo '[]' > entries.json
 
-          gh release view "$VERSION" --repo "$REPO" --json assets \
-            --jq '.assets[] | select(.name | endswith(".img.xz")) | .name + "|" + (.size | tostring)' \
-          | sort | while IFS='|' read -r NAME XZSIZE; do
-            URL="https://github.com/${REPO}/releases/download/${VERSION}/${NAME}"
-            echo "== ${NAME}"
-            curl -sfL "$URL" -o work/img.xz
-            EXTRACT_SIZE=$(xz -l --robot work/img.xz | awk '$1=="totals"{print $5}')
-            EXTRACT_SHA=$(xz -dc work/img.xz | sha256sum | cut -d' ' -f1)
-            rm -f work/img.xz
+          # Published catalog, to reuse already-computed checksums
+          curl -sf "${PAGES}/os_list.json" -o previous.json || echo '{"os_list":[]}' > previous.json
 
-            # Yumi-smartpi1-trixie-debian13-server-<date>.img.xz -> readable name
-            BASE="${NAME%.img.xz}"
-            DISTRO=$(echo "$BASE" | sed -E 's/^Yumi-smartpi1-([a-z]+)-([a-z0-9.]+)-(server|desktop|dietpi)-.*/\1 (\2)/')
-            FLAVOR=$(echo "$BASE" | sed -E 's/^Yumi-smartpi1-[a-z]+-[a-z0-9.]+-(server|desktop|dietpi)-.*/\1/')
-            TITLE="SmartPi One ${DISTRO} ${FLAVOR} ${VERSION}"
+          icon_for() {
+            case "$1" in
+              *-dietpi-*)                                   echo "${PAGES}/icons/dietpi.svg" ;;
+              *-jammy-*|*-noble-*|*-resolute-*)             echo "${PAGES}/icons/ubuntu.svg" ;;
+              *-bullseye-*|*-bookworm-*|*-trixie-*|*-forky-*|*-sid-*) echo "${PAGES}/icons/debian.png" ;;
+              *)                                            echo "${PAGES}/icons/yumi-icon.png" ;;
+            esac
+          }
 
-            jq --arg name "$TITLE" \
-               --arg desc "Yumi SmartPi One image, ${DISTRO} ${FLAVOR}. Instant boot logo, works on any screen up to 4K UHD, SSH over USB." \
-               --arg url "$URL" \
-               --arg date "$RELEASE_DATE" \
-               --argjson dl "$XZSIZE" \
-               --argjson ex "$EXTRACT_SIZE" \
-               --arg sha "$EXTRACT_SHA" \
-               --arg icon "https://yumi-lab.github.io/SmartPi-armbian/icons/yumi-icon.png" \
-               '. += [{name: $name, description: $desc, icon: $icon, url: $url, release_date: $date, image_download_size: $dl, extract_size: $ex, extract_sha256: $sha, init_format: "", devices: ["smartpi-one", "smartpad"], capabilities: []}]' \
-               entries.json > entries.tmp && mv entries.tmp entries.json
-          done
+          add_release() {
+            local REPO="$1"
+            local RELEASE_DATE
+            RELEASE_DATE=$(gh release view "$VERSION" --repo "$REPO" --json publishedAt --jq '.publishedAt[0:10]' 2>/dev/null) || {
+              echo "No ${VERSION} release in ${REPO}, skipping"; return 0; }
 
-          jq --arg icon "https://yumi-lab.github.io/SmartPi-armbian/icons/yumi-icon.png" '{
+            gh release view "$VERSION" --repo "$REPO" --json assets \
+              --jq '.assets[] | select(.name | endswith(".img.xz")) | .name + "|" + (.size | tostring)' \
+            | sort | while IFS='|' read -r NAME XZSIZE; do
+              local URL="https://github.com/${REPO}/releases/download/${VERSION}/${NAME}"
+              echo "== ${NAME}"
+
+              # Reuse checksums when the published catalog already has this
+              # exact asset (same URL and compressed size)
+              local KNOWN EXTRACT_SIZE EXTRACT_SHA
+              KNOWN=$(jq -r --arg url "$URL" --argjson dl "$XZSIZE" \
+                '.os_list[] | select(.url == $url and .image_download_size == $dl) | (.extract_size | tostring) + "|" + .extract_sha256' \
+                previous.json | head -1)
+              if [[ -n "$KNOWN" ]]; then
+                EXTRACT_SIZE="${KNOWN%%|*}"
+                EXTRACT_SHA="${KNOWN##*|}"
+                echo "   checksums reused from published catalog"
+              else
+                curl -sfL "$URL" -o work/img.xz
+                EXTRACT_SIZE=$(xz -l --robot work/img.xz | awk '$1=="totals"{print $5}')
+                EXTRACT_SHA=$(xz -dc work/img.xz | sha256sum | cut -d' ' -f1)
+                rm -f work/img.xz
+              fi
+
+              # Yumi-smartpi1-trixie-debian13-server-<date>.img.xz -> readable name
+              local BASE DISTRO FLAVOR TITLE DESC
+              BASE="${NAME%.img.xz}"
+              DISTRO=$(echo "$BASE" | sed -E 's/^Yumi-smartpi1-([a-z]+)-([a-z0-9.]+)-(server|desktop|dietpi|cloudinit)-.*/\1 (\2)/')
+              FLAVOR=$(echo "$BASE" | sed -E 's/^Yumi-smartpi1-[a-z]+-[a-z0-9.]+-(server|desktop|dietpi|cloudinit)-.*/\1/')
+              if [[ "$FLAVOR" == "dietpi" ]]; then
+                TITLE="YUMi SmartPi One DietPi ${VERSION}"
+                DESC="DietPi for the YUMi SmartPi One, ${DISTRO} base. Lightweight, headless-friendly, WiFi tools preinstalled."
+              else
+                TITLE="YUMi SmartPi One ${DISTRO} ${FLAVOR} ${VERSION}"
+                DESC="Armbian ${DISTRO} ${FLAVOR} for the YUMi SmartPi One. Instant boot logo, works on any screen up to 4K UHD, SSH over USB."
+              fi
+
+              jq --arg name "$TITLE" \
+                 --arg desc "$DESC" \
+                 --arg url "$URL" \
+                 --arg date "$RELEASE_DATE" \
+                 --argjson dl "$XZSIZE" \
+                 --argjson ex "$EXTRACT_SIZE" \
+                 --arg sha "$EXTRACT_SHA" \
+                 --arg icon "$(icon_for "$NAME")" \
+                 '. += [{name: $name, description: $desc, icon: $icon, url: $url, release_date: $date, image_download_size: $dl, extract_size: $ex, extract_sha256: $sha, init_format: "", devices: ["smartpi-one", "smartpad"], capabilities: []}]' \
+                 entries.json > entries.tmp && mv entries.tmp entries.json
+            done
+          }
+
+          # Armbian images only: this catalog is consumed as a sub-list
+          # (subitems_url) by the master SmartPi Imager catalog
+          # (yumi-lab.github.io/SmartPi-imager/os_list.json), which carries
+          # DietPi, YumiOS, Batocera... directly. Adding DietPi here would
+          # duplicate it there.
+          add_release "${{ github.repository }}"
+
+          jq --arg icon "${PAGES}/icons/yumi-icon.png" '{
             imager: {
               devices: [
                 {
@@ -91,8 +142,8 @@ jobs:
             os_list: .
           }' entries.json > out/os_list.json
           mkdir -p out/icons
-          cp build-configs/assets/imager/yumi-icon.png out/icons/yumi-icon.png 2>/dev/null || cp assets/imager/yumi-icon.png out/icons/yumi-icon.png
-          cat out/os_list.json
+          cp assets/imager/yumi-icon.png assets/imager/dietpi.svg assets/imager/ubuntu.svg assets/imager/debian.png out/icons/
+          jq -r '.os_list[] | .name + " | " + .icon' out/os_list.json
 
       - name: Publish to gh-pages
         run: |
