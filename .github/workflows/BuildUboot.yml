@@ -1,0 +1,78 @@
+name: Build U-Boot only
+
+# Builds just the U-Boot package (about 10 minutes) instead of the full image
+# set (about an hour). Useful when iterating on anything baked into the U-Boot
+# binary — the boot logo, the defconfig — since the resulting .deb can be
+# installed on a running board over SSH:
+#   dpkg -i linux-u-boot-smartpi1-current_*.deb
+#   dd if=/usr/lib/linux-u-boot-current-smartpi1/u-boot-sunxi-with-spl.bin \
+#      of=/dev/mmcblk0 bs=1024 seek=8 conv=fsync
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Kernel/U-Boot branch"
+        required: false
+        default: "current"
+      release:
+        description: "Distribution"
+        required: false
+        default: "trixie"
+
+jobs:
+  build:
+    name: Build U-Boot for smartpi1
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          path: build-configs
+
+      - name: Read configs
+        id: config
+        run: |
+          source ./build-configs/configs/config-default.conf
+          echo "armbian_repository=${ARMBIAN_REPOSITORY}" >> $GITHUB_OUTPUT
+          echo "armbian_branch=${ARMBIAN_BRANCH}" >> $GITHUB_OUTPUT
+
+      - name: Checkout armbian Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          repository: ${{ steps.config.outputs.armbian_repository }}
+          ref: ${{ steps.config.outputs.armbian_branch }}
+          path: build
+
+      - name: Add custom board configuration and userpatches
+        run: |
+          cp -R -v ./build-configs/boards/* ./build/config/boards
+          mkdir -p ./build/userpatches
+          cp -R -v ./build-configs/userpatches/* ./build/userpatches
+
+      - name: Build U-Boot
+        env:
+          COLUMNS: "120"
+        run: |
+          cd ./build
+          ./compile.sh uboot \
+            BOARD=smartpi1 \
+            BRANCH=${{ github.event.inputs.branch }} \
+            RELEASE=${{ github.event.inputs.release }} \
+            BUILD_MINIMAL=no \
+            BUILD_DESKTOP=no \
+            KERNEL_CONFIGURE=no
+
+      - name: List built packages
+        run: |
+          sudo chown -R $USER:$USER ${{ github.workspace }}/build || true
+          find ${{ github.workspace }}/build/output/debs -name "linux-u-boot-*.deb" | sort
+
+      - name: Upload U-Boot package
+        uses: actions/upload-artifact@v4
+        with:
+          name: uboot-smartpi1-${{ github.event.inputs.branch }}
+          if-no-files-found: error
+          path: ${{ github.workspace }}/build/output/debs/**/linux-u-boot-*.deb
