@@ -61,11 +61,37 @@ jobs:
                --argjson dl "$XZSIZE" \
                --argjson ex "$EXTRACT_SIZE" \
                --arg sha "$EXTRACT_SHA" \
-               '. += [{name: $name, description: $desc, url: $url, release_date: $date, image_download_size: $dl, extract_size: $ex, extract_sha256: $sha, init_format: ""}]' \
+               --arg icon "https://yumi-lab.github.io/SmartPi-armbian/icons/yumi-icon.png" \
+               '. += [{name: $name, description: $desc, icon: $icon, url: $url, release_date: $date, image_download_size: $dl, extract_size: $ex, extract_sha256: $sha, init_format: "", devices: ["smartpi-one", "smartpad"], capabilities: []}]' \
                entries.json > entries.tmp && mv entries.tmp entries.json
           done
 
-          jq '{os_list: .}' entries.json > out/os_list.json
+          jq --arg icon "https://yumi-lab.github.io/SmartPi-armbian/icons/yumi-icon.png" '{
+            imager: {
+              devices: [
+                {
+                  name: "SmartPi One",
+                  tags: ["smartpi-one"],
+                  icon: $icon,
+                  description: "Yumi Lab SmartPi One (Allwinner H3, 1 GB RAM)",
+                  matching_type: "inclusive",
+                  default: true,
+                  capabilities: []
+                },
+                {
+                  name: "SmartPad",
+                  tags: ["smartpad"],
+                  icon: $icon,
+                  description: "Yumi Lab SmartPad (SmartPi One with a 4.3 inch 800x480 touchscreen)",
+                  matching_type: "inclusive",
+                  capabilities: []
+                }
+              ]
+            },
+            os_list: .
+          }' entries.json > out/os_list.json
+          mkdir -p out/icons
+          cp build-configs/assets/imager/yumi-icon.png out/icons/yumi-icon.png 2>/dev/null || cp assets/imager/yumi-icon.png out/icons/yumi-icon.png
           cat out/os_list.json
 
       - name: Publish to gh-pages
@@ -79,8 +105,8 @@ jobs:
           else
             git worktree add --orphan -b gh-pages pages
           fi
-          cp out/os_list.json pages/os_list.json
+          cp -R out/. pages/
           cd pages
-          git add os_list.json
+          git add -A
           git commit -m "imager repo: ${{ github.event.inputs.version }}" || echo "nothing to commit"
           git push origin HEAD:gh-pages
