@@ -11,9 +11,13 @@ KERNEL_TARGET="legacy,current,edge"
 # video device is probed — before any file is read from the SD card — so it
 # appears immediately, unlike /boot/boot.bmp which the boot script displays
 # once it has been loaded.
+# The blob linked into the binary is drivers/video/u_boot_logo.bmp (see
+# obj-$(CONFIG_VIDEO_LOGO) in drivers/video/Makefile); tools/logos/ only feeds
+# the legacy bmp_logo tool, so overwriting it alone changes nothing.
 function pre_config_uboot_target__smartpi1_yumi_logo() {
 	declare logo="${SRC}/userpatches/overlay/u-boot-logo.bmp"
 	[[ -f "${logo}" ]] || { display_alert "u-boot for ${BOARD}" "Yumi logo not found, keeping the default" "wrn"; return 0; }
 	display_alert "u-boot for ${BOARD}" "installing the Yumi boot logo" "info"
+	run_host_command_logged cp -v "${logo}" drivers/video/u_boot_logo.bmp
 	run_host_command_logged cp -v "${logo}" tools/logos/u-boot_logo.bmp
 }
