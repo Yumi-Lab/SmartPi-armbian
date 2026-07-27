@@ -1,0 +1,38 @@
+From: Nicolas Michaut <nicolas@yumilab.com>
+Subject: [PATCH] Bluetooth: hci_sync: add hci_test_quirk compat helper for 6.12
+Date: 2026-07-27
+
+Armbian's drv-bluetooth-hci-sprd-broken-park-link-quirk-v6.1-6.15.patch
+(added to sunxi-6.12 on 2026-07-27) calls hci_test_quirk(), a helper
+that only exists since kernel 6.16 -- on 6.12 the build fails with
+"implicit declaration of function 'hci_test_quirk'". Provide the 6.12
+equivalent as a local static inline so the call compiles and behaves
+identically (quirks are a bitmap in hdev->quirks on this kernel).
+Harmless if Armbian fixes or drops their patch: an unused static
+inline generates no warning.
+
+Signed-off-by: Nicolas Michaut <nicolas@yumilab.com>
+---
+ net/bluetooth/hci_sync.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/net/bluetooth/hci_sync.c b/net/bluetooth/hci_sync.c
+--- a/net/bluetooth/hci_sync.c
++++ b/net/bluetooth/hci_sync.c
+@@ -19,6 +19,15 @@
+ #include "aosp.h"
+ #include "leds.h"
+
++/* Compat for out-of-tree patches written against >= 6.16, where
++ * hci_test_quirk() replaced open-coded test_bit() on hdev->quirks.
++ */
++static inline bool hci_test_quirk(const struct hci_dev *hdev, int quirk)
++{
++	return test_bit(quirk, &hdev->quirks);
++}
++
+ static void hci_cmd_sync_complete(struct hci_dev *hdev, u8 result, u16 opcode,
+ 				  struct sk_buff *skb)
+ {
+--
+2.43.0
