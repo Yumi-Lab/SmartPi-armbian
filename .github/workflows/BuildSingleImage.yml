@@ -1,0 +1,165 @@
+name: Build single image
+
+# Builds ONE image outside the main matrix, so experimental configs (new
+# Debian/Ubuntu releases, new variants) can be iterated on without re-running
+# the whole 8-image BuildImages matrix. Looks for the config file in
+# configs-wip/ first, then in configs/.
+#
+# Deliberately self-contained (like BuildUboot.yml) instead of reusing
+# actions/build-image: pushing changes to actions/** would auto-trigger the
+# full matrix.
+
+on:
+  workflow_dispatch:
+    inputs:
+      configfile:
+        description: "Config name (without .conf), from configs-wip/ or configs/"
+        required: false
+        default: "smartpi1-forky-server"
+
+jobs:
+  build:
+    name: Build ${{ github.event.inputs.configfile }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          path: build-configs
+          fetch-depth: 0
+
+      - name: Locate config file
+        id: locate
+        shell: bash
+        run: |
+          NAME="${{ github.event.inputs.configfile }}"
+          for dir in configs-wip configs; do
+            if [[ -f "./build-configs/${dir}/${NAME}.conf" ]]; then
+              echo "configpath=${dir}/${NAME}.conf" >> $GITHUB_OUTPUT
+              echo "Found: ${dir}/${NAME}.conf"
+              exit 0
+            fi
+          done
+          echo "Config ${NAME}.conf not found in configs-wip/ or configs/" >&2
+          exit 1
+
+      - name: Enable QEMU for ARM builds
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-user-static binfmt-support qemu-system-arm
+          sudo update-binfmts --enable qemu-arm
+          sudo update-binfmts --enable qemu-aarch64
+          docker run --privileged --rm tonistiigi/binfmt --install all
+
+      - name: Free Github Runner
+        uses: descriptinc/free-disk-space@main
+        with:
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
+      - name: Read configs
+        id: config
+        shell: bash
+        run: |
+          source ./build-configs/configs/config-default.conf
+          source ./build-configs/${{ steps.locate.outputs.configpath }}
+          echo "armbian_repository=${ARMBIAN_REPOSITORY}" >> $GITHUB_OUTPUT
+          echo "armbian_branch=${ARMBIAN_BRANCH}" >> $GITHUB_OUTPUT
+
+      - name: Checkout armbian Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          repository: ${{ steps.config.outputs.armbian_repository }}
+          ref: ${{ steps.config.outputs.armbian_branch }}
+          path: build
+
+      - name: Create config-default.conf
+        shell: bash
+        run: |
+          mkdir -p ./build/userpatches
+          cp ./build-configs/configs/config-default.conf ./build/userpatches/config-settings.conf
+          cat ./build-configs/${{ steps.locate.outputs.configpath }} >> ./build/userpatches/config-settings.conf
+          echo "::group::Output config-settings.conf"
+          cat ./build/userpatches/config-settings.conf
+          echo "::endgroup::"
+
+      - name: Add custom board configuration and userpatches
+        shell: bash
+        run: |
+          cp -R -v ./build-configs/boards/* ./build/config/boards
+          cp -R -v ./build-configs/userpatches/* ./build/userpatches
+
+      - name: sed VERSION
+        shell: bash
+        run: |
+          sed -i 's/-trunk//' ./build/VERSION
+
+      - name: Build Image
+        shell: bash
+        env:
+          # CI runners have no tty; an empty COLUMNS forwarded into the chroot
+          # crashes mksh-based maintainer scripts ("COLUMNS: bad number").
+          COLUMNS: "120"
+        run: |
+          cd ./build
+          ./compile.sh settings
+
+      - name: Fix userrights
+        shell: bash
+        run: |
+          sudo chown -R $USER:$USER ${{ github.workspace }}/build || true
+          sudo chmod 0777 -R ${{ github.workspace }}/build || true
+
+      - name: Generate Name Prefix
+        id: image_name
+        shell: bash
+        run: |
+          source ./build-configs/configs/config-default.conf
+          configfile="${{ github.event.inputs.configfile }}"
+          configfile=$(echo "$configfile" | sed \
+            -e 's/bullseye-/bullseye-debian11-/' \
+            -e 's/bookworm-/bookworm-debian12-/' \
+            -e 's/trixie-/trixie-debian13-/' \
+            -e 's/forky-/forky-debian14-/' \
+            -e 's/jammy-/jammy-ubuntu22.04-/' \
+            -e 's/noble-/noble-ubuntu24.04-/' \
+            -e 's/resolute-/resolute-ubuntu26.04-/')
+          img_name="${VENDOR}-${configfile}-$(date -u +%Y-%m-%d-%H%M)"
+          echo "image_name=${img_name}" >> $GITHUB_OUTPUT
+          echo "Image name: ${img_name}"
+
+      - name: Rename Files
+        run: |
+          cd ${{ github.workspace }}/build/output/images/
+          mv *.img ${{ steps.image_name.outputs.image_name }}.img
+          mv *.txt ${{ steps.image_name.outputs.image_name }}.txt || true
+
+      - name: Compressing Image
+        run: |
+          cd ${{ github.workspace }}/build/output/images/
+          xz -efkvzT0 ${{ steps.image_name.outputs.image_name }}.img || true
+
+      - name: Calculating checksums
+        run: |
+          cd ${{ github.workspace }}/build/output/images/
+          sha256sum ${{ steps.image_name.outputs.image_name }}.img > ${{ steps.image_name.outputs.image_name }}.img.sha256
+          sha256sum ${{ steps.image_name.outputs.image_name }}.img.xz > ${{ steps.image_name.outputs.image_name }}.img.xz.sha256
+
+      - name: Upload compressed image
+        uses: actions/upload-artifact@v4.3.0
+        with:
+          name: ${{ steps.image_name.outputs.image_name }}.img.xz
+          path: ${{ github.workspace }}/build/output/images/${{ steps.image_name.outputs.image_name }}.img.xz
+
+      - name: Upload compressed image checksum
+        uses: actions/upload-artifact@v4.3.0
+        with:
+          name: ${{ steps.image_name.outputs.image_name }}.img.xz.sha256
+          path: ${{ github.workspace }}/build/output/images/${{ steps.image_name.outputs.image_name }}.img.xz.sha256
