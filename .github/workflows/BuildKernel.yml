@@ -1,0 +1,68 @@
+name: Build kernel only
+
+# Builds just the kernel packages (about 30 minutes) instead of the full
+# image set. Useful when iterating on anything under
+# userpatches/kernel/archive/ — patch apply failures and compile errors
+# surface here without burning a 9-image matrix run.
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Kernel branch (legacy = 6.12, current = 6.18, edge = 7.0)"
+        required: false
+        default: "legacy"
+
+jobs:
+  build:
+    name: Build ${{ github.event.inputs.branch }} kernel for smartpi1
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          path: build-configs
+
+      - name: Read configs
+        id: config
+        run: |
+          source ./build-configs/configs/config-default.conf
+          echo "armbian_repository=${ARMBIAN_REPOSITORY}" >> $GITHUB_OUTPUT
+          echo "armbian_branch=${ARMBIAN_BRANCH}" >> $GITHUB_OUTPUT
+
+      - name: Checkout armbian Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          repository: ${{ steps.config.outputs.armbian_repository }}
+          ref: ${{ steps.config.outputs.armbian_branch }}
+          path: build
+
+      - name: Add custom board configuration and userpatches
+        run: |
+          cp -R -v ./build-configs/boards/* ./build/config/boards
+          mkdir -p ./build/userpatches
+          cp -R -v ./build-configs/userpatches/* ./build/userpatches
+
+      - name: Build kernel
+        env:
+          COLUMNS: "120"
+        run: |
+          cd ./build
+          ./compile.sh kernel \
+            BOARD=smartpi1 \
+            BRANCH=${{ github.event.inputs.branch }} \
+            KERNEL_CONFIGURE=no
+
+      - name: List built packages
+        run: |
+          sudo chown -R $USER:$USER ${{ github.workspace }}/build || true
+          find ${{ github.workspace }}/build/output/debs -name "linux-*.deb" | sort
+
+      - name: Upload kernel packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-smartpi1-${{ github.event.inputs.branch }}
+          if-no-files-found: error
+          path: ${{ github.workspace }}/build/output/debs/**/linux-*.deb
