@@ -2,23 +2,23 @@
   "imager": {
     "devices": [
       {
-        "name": "SmartPi One",
+        "name": "YUMi SmartPi One",
         "tags": [
           "smartpi-one"
         ],
         "icon": "https://yumi-lab.github.io/SmartPi-armbian/icons/yumi-icon.png",
-        "description": "Yumi Lab SmartPi One (Allwinner H3, 1 GB RAM)",
+        "description": "Single Board Computer",
         "matching_type": "inclusive",
         "default": true,
         "capabilities": []
       },
       {
-        "name": "SmartPad",
+        "name": "YUMi SmartPad",
         "tags": [
           "smartpad"
         ],
         "icon": "https://yumi-lab.github.io/SmartPi-armbian/icons/yumi-icon.png",
-        "description": "Yumi Lab SmartPad (SmartPi One with a 4.3 inch 800x480 touchscreen)",
+        "description": "Includes a capacitive 800x480 touch screen",
         "matching_type": "inclusive",
         "capabilities": []
       }
@@ -26,9 +26,9 @@
   },
   "os_list": [
     {
-      "name": "SmartPi One bookworm (debian12) desktop v1.8.0-rc4",
-      "description": "Yumi SmartPi One image, bookworm (debian12) desktop. Instant boot logo, works on any screen up to 4K UHD, SSH over USB.",
-      "icon": "https://yumi-lab.github.io/SmartPi-armbian/icons/yumi-icon.png",
+      "name": "YUMi SmartPi One bookworm (debian12) desktop v1.8.0-rc4",
+      "description": "Armbian bookworm (debian12) desktop for the YUMi SmartPi One. Instant boot logo, works on any screen up to 4K UHD, SSH over USB.",
+      "icon": "https://yumi-lab.github.io/SmartPi-armbian/icons/debian.png",
       "url": "https://github.com/Yumi-Lab/SmartPi-armbian/releases/download/v1.8.0-rc4/Yumi-smartpi1-bookworm-debian12-desktop-2026-07-27-0249.img.xz",
       "release_date": "2026-07-27",
       "image_download_size": 1422260488,
@@ -42,9 +42,9 @@
       "capabilities": []
     },
     {
-      "name": "SmartPi One bookworm (debian12) server v1.8.0-rc4",
-      "description": "Yumi SmartPi One image, bookworm (debian12) server. Instant boot logo, works on any screen up to 4K UHD, SSH over USB.",
-      "icon": "https://yumi-lab.github.io/SmartPi-armbian/icons/yumi-icon.png",
+      "name": "YUMi SmartPi One bookworm (debian12) server v1.8.0-rc4",
+      "description": "Armbian bookworm (debian12) server for the YUMi SmartPi One. Instant boot logo, works on any screen up to 4K UHD, SSH over USB.",
+      "icon": "https://yumi-lab.github.io/SmartPi-armbian/icons/debian.png",
       "url": "https://github.com/Yumi-Lab/SmartPi-armbian/releases/download/v1.8.0-rc4/Yumi-smartpi1-bookworm-debian12-server-2026-07-27-0249.img.xz",
       "release_date": "2026-07-27",
       "image_download_size": 535601992,
@@ -58,9 +58,9 @@
       "capabilities": []
     },
     {
-      "name": "SmartPi One bullseye (debian11) server v1.8.0-rc4",
-      "description": "Yumi SmartPi One image, bullseye (debian11) server. Instant boot logo, works on any screen up to 4K UHD, SSH over USB.",
-      "icon": "https://yumi-lab.github.io/SmartPi-armbian/icons/yumi-icon.png",
+      "name": "YUMi SmartPi One bullseye (debian11) server v1.8.0-rc4",
+      "description": "Armbian bullseye (debian11) server for the YUMi SmartPi One. Instant boot logo, works on any screen up to 4K UHD, SSH over USB.",
+      "icon": "https://yumi-lab.github.io/SmartPi-armbian/icons/debian.png",
       "url": "https://github.com/Yumi-Lab/SmartPi-armbian/releases/download/v1.8.0-rc4/Yumi-smartpi1-bullseye-debian11-server-2026-07-27-0249.img.xz",
       "release_date": "2026-07-27",
       "image_download_size": 488037900,
@@ -74,9 +74,9 @@
       "capabilities": []
     },
     {
-      "name": "SmartPi One jammy (ubuntu22.04) server v1.8.0-rc4",
-      "description": "Yumi SmartPi One image, jammy (ubuntu22.04) server. Instant boot logo, works on any screen up to 4K UHD, SSH over USB.",
-      "icon": "https://yumi-lab.github.io/SmartPi-armbian/icons/yumi-icon.png",
+      "name": "YUMi SmartPi One jammy (ubuntu22.04) server v1.8.0-rc4",
+      "description": "Armbian jammy (ubuntu22.04) server for the YUMi SmartPi One. Instant boot logo, works on any screen up to 4K UHD, SSH over USB.",
+      "icon": "https://yumi-lab.github.io/SmartPi-armbian/icons/ubuntu.svg",
       "url": "https://github.com/Yumi-Lab/SmartPi-armbian/releases/download/v1.8.0-rc4/Yumi-smartpi1-jammy-ubuntu22.04-server-2026-07-27-0249.img.xz",
       "release_date": "2026-07-27",
       "image_download_size": 570209660,
@@ -90,9 +90,9 @@
       "capabilities": []
     },
     {
-      "name": "SmartPi One noble (ubuntu24.04) desktop v1.8.0-rc4",
-      "description": "Yumi SmartPi One image, noble (ubuntu24.04) desktop. Instant boot logo, works on any screen up to 4K UHD, SSH over USB.",
-      "icon": "https://yumi-lab.github.io/SmartPi-armbian/icons/yumi-icon.png",
+      "name": "YUMi SmartPi One noble (ubuntu24.04) desktop v1.8.0-rc4",
+      "description": "Armbian noble (ubuntu24.04) desktop for the YUMi SmartPi One. Instant boot logo, works on any screen up to 4K UHD, SSH over USB.",
+      "icon": "https://yumi-lab.github.io/SmartPi-armbian/icons/ubuntu.svg",
       "url": "https://github.com/Yumi-Lab/SmartPi-armbian/releases/download/v1.8.0-rc4/Yumi-smartpi1-noble-ubuntu24.04-desktop-2026-07-27-0249.img.xz",
       "release_date": "2026-07-27",
       "image_download_size": 1340891412,
@@ -106,9 +106,9 @@
       "capabilities": []
     },
     {
-      "name": "SmartPi One noble (ubuntu24.04) server v1.8.0-rc4",
-      "description": "Yumi SmartPi One image, noble (ubuntu24.04) server. Instant boot logo, works on any screen up to 4K UHD, SSH over USB.",
-      "icon": "https://yumi-lab.github.io/SmartPi-armbian/icons/yumi-icon.png",
+      "name": "YUMi SmartPi One noble (ubuntu24.04) server v1.8.0-rc4",
+      "description": "Armbian noble (ubuntu24.04) server for the YUMi SmartPi One. Instant boot logo, works on any screen up to 4K UHD, SSH over USB.",
+      "icon": "https://yumi-lab.github.io/SmartPi-armbian/icons/ubuntu.svg",
       "url": "https://github.com/Yumi-Lab/SmartPi-armbian/releases/download/v1.8.0-rc4/Yumi-smartpi1-noble-ubuntu24.04-server-2026-07-27-0249.img.xz",
       "release_date": "2026-07-27",
       "image_download_size": 553294248,
@@ -122,9 +122,9 @@
       "capabilities": []
     },
     {
-      "name": "SmartPi One trixie (debian13) desktop v1.8.0-rc4",
-      "description": "Yumi SmartPi One image, trixie (debian13) desktop. Instant boot logo, works on any screen up to 4K UHD, SSH over USB.",
-      "icon": "https://yumi-lab.github.io/SmartPi-armbian/icons/yumi-icon.png",
+      "name": "YUMi SmartPi One trixie (debian13) desktop v1.8.0-rc4",
+      "description": "Armbian trixie (debian13) desktop for the YUMi SmartPi One. Instant boot logo, works on any screen up to 4K UHD, SSH over USB.",
+      "icon": "https://yumi-lab.github.io/SmartPi-armbian/icons/debian.png",
       "url": "https://github.com/Yumi-Lab/SmartPi-armbian/releases/download/v1.8.0-rc4/Yumi-smartpi1-trixie-debian13-desktop-2026-07-27-0249.img.xz",
       "release_date": "2026-07-27",
       "image_download_size": 1438000644,
@@ -138,9 +138,9 @@
       "capabilities": []
     },
     {
-      "name": "SmartPi One trixie (debian13) server v1.8.0-rc4",
-      "description": "Yumi SmartPi One image, trixie (debian13) server. Instant boot logo, works on any screen up to 4K UHD, SSH over USB.",
-      "icon": "https://yumi-lab.github.io/SmartPi-armbian/icons/yumi-icon.png",
+      "name": "YUMi SmartPi One trixie (debian13) server v1.8.0-rc4",
+      "description": "Armbian trixie (debian13) server for the YUMi SmartPi One. Instant boot logo, works on any screen up to 4K UHD, SSH over USB.",
+      "icon": "https://yumi-lab.github.io/SmartPi-armbian/icons/debian.png",
       "url": "https://github.com/Yumi-Lab/SmartPi-armbian/releases/download/v1.8.0-rc4/Yumi-smartpi1-trixie-debian13-server-2026-07-27-0249.img.xz",
       "release_date": "2026-07-27",
       "image_download_size": 553716948,
