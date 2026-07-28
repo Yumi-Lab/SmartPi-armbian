@@ -20,7 +20,7 @@ Custom Armbian image builder for SmartPi devices by **[Yumi Lab](https://www.yum
 - **H3 CPU overclock to 1368 MHz** (since v1.8.0) — explicit opt-in through `sudo smartpi-oc on` (stock 1296 MHz with the adaptive governor by default)
 - **SSH over the USB OTG port** (since v1.8.0) — one cable powers the board and provides network access (NCM gadget: Linux, Windows 11, macOS)
 - **Kernel headers pre-installed** — compile and load kernel modules directly on the board (WiFi drivers, DKMS modules) without a cross-compilation setup
-- **9 images** built automatically for 6 distros (single `smartpi1` board, also used on SmartPad), flashable through Raspberry Pi Imager with the Yumi repository
+- **10 images** built automatically for 6 distros (single `smartpi1` board, also used on SmartPad), flashable through Raspberry Pi Imager with the Yumi repository
 
 ## Table of Contents
 
