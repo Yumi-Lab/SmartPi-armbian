@@ -1,0 +1,62 @@
+From: Nicolas Michaut <nicolas@yumilab.com>
+Subject: [PATCH] clk: sunxi-ng: h3: restore CPU PLL gating and reparenting notifiers
+Date: 2026-07-28
+
+The megous patchset removes the two safety notifiers around CPUX
+frequency changes (reparent the CPU to the 24 MHz oscillator and gate
+the PLL while it is being reprogrammed). Without them the cores keep
+running on PLL_CPUX while it relocks, which hard-locks some boards
+during the first DVFS bursts of the boot -- exactly what Armbian fixed
+on sunxi-6.18 by disabling that patch (PR 10083, "fix H3/H5 RCU stall
+/ CPU hang during DVFS"), a fix that never reached sunxi-6.12. The
+SmartPi One freezes right after "Reached target Paths." without this.
+
+Applied after the megous patchset, this restores the mainline
+notifiers on the legacy kernel.
+
+Signed-off-by: Nicolas Michaut <nicolas@yumilab.com>
+---
+ drivers/clk/sunxi-ng/ccu-sun8i-h3.c | 22 ++++++++++++++++++++++
+ 1 file changed, 22 insertions(+)
+
+--- a/drivers/clk/sunxi-ng/ccu-sun8i-h3.c
++++ b/drivers/clk/sunxi-ng/ccu-sun8i-h3.c
+@@ -1021,8 +1021,22 @@
+ 
+ 	.resets		= sun50i_h5_ccu_resets,
+ 	.num_resets	= ARRAY_SIZE(sun50i_h5_ccu_resets),
++};
++
++static struct ccu_pll_nb sun8i_h3_pll_cpu_nb = {
++	.common	= &pll_cpux_clk.common,
++	/* copy from pll_cpux_clk */
++	.enable	= BIT(31),
++	.lock	= BIT(28),
+ };
+ 
++static struct ccu_mux_nb sun8i_h3_cpu_nb = {
++	.common		= &cpux_clk.common,
++	.cm		= &cpux_clk.mux,
++	.delay_us	= 1, /* > 8 clock cycles at 24 MHz */
++	.bypass_index	= 1, /* index of 24 MHz oscillator */
++};
++
+ static int sun8i_h3_ccu_probe(struct platform_device *pdev)
+ {
+ 	const struct sunxi_ccu_desc *desc;
+@@ -1047,6 +1061,13 @@
+ 	if (ret)
+ 		return ret;
+ 
++	/* Gate then ungate PLL CPU after any rate changes */
++	ccu_pll_notifier_register(&sun8i_h3_pll_cpu_nb);
++
++	/* Reparent CPU during PLL CPU rate changes */
++	ccu_mux_notifier_register(pll_cpux_clk.common.hw.clk,
++				  &sun8i_h3_cpu_nb);
++
+ 	return 0;
+ }
+ 
+-- 
+2.43.0
