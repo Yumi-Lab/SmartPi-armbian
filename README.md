@@ -20,7 +20,7 @@ Custom Armbian image builder for SmartPi devices by **[Yumi Lab](https://www.yum
 - **H3 CPU overclock to 1368 MHz** (since v1.8.0) — explicit opt-in through `sudo smartpi-oc on` (stock 1296 MHz with the adaptive governor by default)
 - **SSH over the USB OTG port** (since v1.8.0) — one cable powers the board and provides network access (NCM gadget: Linux, Windows 11, macOS)
 - **Kernel headers pre-installed** — compile and load kernel modules directly on the board (WiFi drivers, DKMS modules) without a cross-compilation setup
-- **10 images** built automatically for 6 distros (single `smartpi1` board, also used on SmartPad), flashable through Raspberry Pi Imager with the Yumi repository
+- **11 images** built automatically for 6 distros (single `smartpi1` board, also used on SmartPad), flashable through Raspberry Pi Imager with the Yumi repository
 
 ## Table of Contents
 
@@ -78,7 +78,7 @@ The SmartPad is a SmartPi One fitted with a 4.3" 800x480 HDMI touchscreen — it
 | ![Bullseye](https://img.shields.io/badge/Bullseye-Debian_11-A81D33?logo=debian&logoColor=white) | Debian 11 | Legacy (server only) |
 | ![Bookworm](https://img.shields.io/badge/Bookworm-Debian_12-A81D33?logo=debian&logoColor=white) | Debian 12 | Oldstable |
 | ![Trixie](https://img.shields.io/badge/Trixie-Debian_13-A81D33?logo=debian&logoColor=white) | Debian 13 | **Current Stable** |
-| ![Forky](https://img.shields.io/badge/Forky-Debian_14-A81D33?logo=debian&logoColor=white) | Debian 14 | Testing preview (server only) |
+| ![Forky](https://img.shields.io/badge/Forky-Debian_14-A81D33?logo=debian&logoColor=white) | Debian 14 | Testing preview |
 
 ### Ubuntu
 ![Ubuntu](https://img.shields.io/badge/Ubuntu-E95420?style=for-the-badge&logo=ubuntu&logoColor=white)
