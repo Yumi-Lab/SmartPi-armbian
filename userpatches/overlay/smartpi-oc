@@ -1,0 +1,62 @@
+#!/bin/sh
+# Enable or disable the SmartPi One CPU overclock (1368 MHz @ 1.40 V).
+#
+#   smartpi-oc on      enable the overclock (takes effect after reboot)
+#   smartpi-oc off     back to stock (max 1296 MHz, adaptive governor)
+#   smartpi-oc status  show the current state
+#
+# "on" enables the opp1368 device-tree overlay and boots with the
+# performance governor: the CPU sits at 1368 MHz instead of hopping
+# between frequencies, which is what destabilizes boards during boot.
+
+ENV=/boot/armbianEnv.txt
+TOKEN_OVERLAY="opp1368"
+TOKEN_GOV="cpufreq.default_governor=performance"
+
+[ "$(id -u)" = "0" ] || { echo "run as root (sudo smartpi-oc ...)"; exit 1; }
+[ -f "$ENV" ] || { echo "$ENV not found"; exit 1; }
+
+current_state() {
+    if grep -q "^user_overlays=.*\b${TOKEN_OVERLAY}\b" "$ENV"; then
+        echo "on"
+    else
+        echo "off"
+    fi
+}
+
+case "$1" in
+    on)
+        if grep -q "^user_overlays=" "$ENV"; then
+            grep -q "^user_overlays=.*\b${TOKEN_OVERLAY}\b" "$ENV" || \
+                sed -i "s|^user_overlays=|user_overlays=${TOKEN_OVERLAY} |" "$ENV"
+        else
+            echo "user_overlays=${TOKEN_OVERLAY}" >> "$ENV"
+        fi
+        if grep -q "^extraargs=" "$ENV"; then
+            grep -q "^extraargs=.*${TOKEN_GOV}" "$ENV" || \
+                sed -i "s|^extraargs=\(.*\)|extraargs=\1 ${TOKEN_GOV}|" "$ENV"
+        else
+            echo "extraargs=${TOKEN_GOV}" >> "$ENV"
+        fi
+        echo "Overclock enabled: 1368 MHz @ 1.40 V, performance governor."
+        echo "Reboot to apply."
+        ;;
+    off)
+        sed -i "s|^\(user_overlays=.*\)\b${TOKEN_OVERLAY}\b *|\1|; s|^user_overlays= *$||" "$ENV"
+        sed -i "/^$/d" "$ENV"
+        sed -i "s|^\(extraargs=.*\) *${TOKEN_GOV}|\1|" "$ENV"
+        echo "Overclock disabled: stock frequencies (max 1296 MHz), adaptive governor."
+        echo "Reboot to apply."
+        ;;
+    status)
+        echo "overclock: $(current_state)"
+        if [ -r /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq ]; then
+            echo "current max: $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq) kHz"
+            echo "governor:    $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor)"
+        fi
+        ;;
+    *)
+        echo "usage: smartpi-oc on|off|status"
+        exit 1
+        ;;
+esac

@@ -1,0 +1,20 @@
+/dts-v1/;
+/plugin/;
+
+/* Enable the 1368 MHz CPU OPP at 1.40 V (Yumi-validated voltage).
+ * Armbian ships the OPP disabled and their own overlay uses 1.30 V,
+ * which is not stable on SmartPi One boards. Applied as a user overlay
+ * (/boot/overlay-user) by "smartpi-oc on".
+ */
+
+/ {
+	compatible = "allwinner,sun8i-h3";
+
+	fragment@0 {
+		target-path = "/opp-table-cpu/opp-1368000000";
+		__overlay__ {
+			status = "okay";
+			opp-microvolt = <1400000 1400000 1400000>;
+		};
+	};
+};

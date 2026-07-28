@@ -38,6 +38,7 @@ Main() {
             installUsbGadgetNet
             disableSimpledrm
             forceUniversalVideoMode
+            installOverclockControl
             if [[ "${BUILD_DESKTOP}" = "yes" ]]; then
                 installRotationScript
                 patchLightdm
@@ -107,6 +108,23 @@ forceUniversalVideoMode() {
     fi
     grep "^extraargs=" "${bootcfg}"
     echo "Force universal 720p video mode ... [DONE]"
+}
+
+installOverclockControl() {
+    # The 1368 MHz OPP is no longer force-enabled in the kernel patches:
+    # with Armbian's current voltage tables the frequency hopping during
+    # boot hangs boards right after "Reached target Paths." (verified on
+    # hardware; the same image boots with cpufreq disabled). Default is
+    # now the stock table — max 1296 MHz, adaptive governor — and
+    # "smartpi-oc on" opts in to 1368 MHz at the Yumi-validated 1.40 V
+    # with the performance governor (no frequency hopping).
+    echo "Install overclock control (smartpi-oc) ..."
+    apt-get install -y --no-install-recommends device-tree-compiler
+    mkdir -p /boot/overlay-user
+    dtc -@ -I dts -O dtb -o /boot/overlay-user/opp1368.dtbo /tmp/overlay/opp1368.dts
+    cp -v /tmp/overlay/smartpi-oc /usr/local/bin/smartpi-oc
+    chmod 755 /usr/local/bin/smartpi-oc
+    echo "Install overclock control ... [DONE]"
 }
 
 installUsbGadgetNet() {
