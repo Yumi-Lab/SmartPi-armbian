@@ -88,7 +88,7 @@ The SmartPad is a SmartPi One fitted with a 4.3" 800x480 HDMI touchscreen — it
 
 ## H3 CPU Overclock
 
-By default the images run the stock frequency table — up to **1296 MHz** with the adaptive cpufreq governor. The **1368 MHz at 1.40 V** overclock is an explicit opt-in through the `smartpi-oc` command:
+By default the images run the stock frequency table — up to **1296 MHz** with the adaptive cpufreq governor. The **1368 MHz** overclock is an explicit opt-in through the `smartpi-oc` command:
 
 ```bash
 sudo smartpi-oc on       # enable the overclock, then reboot
@@ -105,12 +105,14 @@ sudo smartpi-oc status
 # governor:    performance
 ```
 
-How it works: `smartpi-oc on` enables a device-tree overlay (`/boot/overlay-user/opp1368.dtbo`) that adds the 1368 MHz operating point at the Yumi-validated 1.40 V, and boots with the `performance` governor so the CPU sits at 1368 MHz instead of hopping between frequencies. Rapid frequency transitions with the 1368 MHz point in the table are what used to hang boards during startup; a fixed frequency has months of stress-test validation behind it. The thermal throttle stays active at 85 C — a heatsink with active fan is recommended for sustained workloads.
+How it works: `smartpi-oc on` enables a device-tree overlay (`/boot/overlay-user/opp1368.dtbo`) that adds the 1368 MHz operating point, and boots with the `performance` governor so the CPU sits at 1368 MHz instead of hopping between frequencies. Rapid frequency transitions with the 1368 MHz point in the table are what used to hang boards during startup; a fixed frequency has months of stress-test validation behind it. The thermal throttle stays active at 85 C — a heatsink with active fan is recommended for sustained workloads.
 
-| Mode | Max frequency | Voltage | Governor |
-|------|---------------|---------|----------|
-| default | 1296 MHz | 1.30 V | adaptive (ondemand) |
-| `smartpi-oc on` | 1368 MHz | 1.40 V | performance |
+| Mode | Max frequency | Governor |
+|------|---------------|----------|
+| default | 1296 MHz | adaptive (ondemand) |
+| `smartpi-oc on` | 1368 MHz | performance |
+
+Note on voltage: the SmartPi One has no software-controlled CPU regulator — VDD-CPUX is fixed by the board hardware, so the voltages listed in kernel OPP tables are never actually applied. 1368 MHz is stress-test validated on Yumi boards at that fixed voltage.
 
 See [docs/H3-OVERCLOCK.md](docs/H3-OVERCLOCK.md) for technical details.
 

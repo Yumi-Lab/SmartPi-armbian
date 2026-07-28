@@ -1,9 +1,11 @@
 /dts-v1/;
 /plugin/;
 
-/* Enable the 1368 MHz CPU OPP at 1.40 V (Yumi-validated voltage).
- * Armbian ships the OPP disabled and their own overlay uses 1.30 V,
- * which is not stable on SmartPi One boards. Applied as a user overlay
+/* Enable the 1368 MHz CPU OPP. The opp-microvolt value is declarative
+ * only: the SmartPi One (NanoPi M1 design) has no software-controlled
+ * CPU regulator, VDD-CPUX is fixed by the board hardware, so cpufreq
+ * scales frequency only. 1368 MHz is stress-test validated on Yumi
+ * boards at that fixed voltage. Applied as a user overlay
  * (/boot/overlay-user) by "smartpi-oc on".
  */
 

@@ -1,5 +1,6 @@
 #!/bin/sh
-# Enable or disable the SmartPi One CPU overclock (1368 MHz @ 1.40 V).
+# Enable or disable the SmartPi One CPU overclock (1368 MHz; the CPU
+# voltage is fixed by the board hardware, no regulator is involved).
 #
 #   smartpi-oc on      enable the overclock (takes effect after reboot)
 #   smartpi-oc off     back to stock (max 1296 MHz, adaptive governor)
@@ -38,7 +39,7 @@ case "$1" in
         else
             echo "extraargs=${TOKEN_GOV}" >> "$ENV"
         fi
-        echo "Overclock enabled: 1368 MHz @ 1.40 V, performance governor."
+        echo "Overclock enabled: 1368 MHz, performance governor."
         echo "Reboot to apply."
         ;;
     off)
