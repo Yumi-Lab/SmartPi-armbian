@@ -7,7 +7,7 @@
 # SmartPi-armbian
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![Version](https://img.shields.io/badge/Version-1.8.0--rc2-green.svg)](https://github.com/Yumi-Lab/SmartPi-armbian/releases)
+[![Version](https://img.shields.io/badge/Version-1.8.0--rc4-green.svg)](https://github.com/Yumi-Lab/SmartPi-armbian/releases)
 [![Build Images](https://github.com/Yumi-Lab/SmartPi-armbian/actions/workflows/BuildImages.yml/badge.svg)](https://github.com/Yumi-Lab/SmartPi-armbian/actions/workflows/BuildImages.yml)
 [![Wiki](https://img.shields.io/badge/Wiki-Documentation-orange?logo=gitbook&logoColor=white)](https://wiki.yumi-lab.com)
 
@@ -15,11 +15,12 @@ Custom Armbian image builder for SmartPi devices by **[Yumi Lab](https://www.yum
 
 ### Key features (since v1.7.0)
 
-- **Kernel headers pre-installed** — allows compiling and loading kernel modules directly on the board (WiFi drivers, GPIO drivers, DKMS modules, etc.) without needing a cross-compilation setup
-- **H3 CPU overclock to 1368 MHz** (since v1.8.0) — +5.5% over stock 1296 MHz, managed automatically by the cpufreq governor
-- **SSH over the USB OTG port** (since v1.8.0) — one cable powers the board and provides network access, no Ethernet or WiFi needed
-- **Customizable boot logo** (since v1.8.0) — U-Boot displays `boot.bmp` from the FAT boot partition; replace it from any computer
-- **8 images** built automatically for 5 distros (single `smartpi1` board, also used on SmartPad; jammy is server-only)
+- **Instant boot logo** (since v1.8.0) — the Yumi logo is built into U-Boot and drawn centered the moment the video output initialises, before anything is read from the SD card
+- **Works on any screen up to 4K UHD** (since v1.8.0) — display fixed at 1280x720@60, accepted and upscaled by every screen from the SmartPad panel to 4K monitors
+- **H3 CPU overclock to 1368 MHz** (since v1.8.0) — explicit opt-in through `sudo smartpi-oc on` (stock 1296 MHz with the adaptive governor by default)
+- **SSH over the USB OTG port** (since v1.8.0) — one cable powers the board and provides network access (NCM gadget: Linux, Windows 11, macOS)
+- **Kernel headers pre-installed** — compile and load kernel modules directly on the board (WiFi drivers, DKMS modules) without a cross-compilation setup
+- **9 images** built automatically for 6 distros (single `smartpi1` board, also used on SmartPad), flashable through Raspberry Pi Imager with the Yumi repository
 
 ## Table of Contents
 
@@ -74,9 +75,10 @@ The SmartPad is a SmartPi One fitted with a 4.3" 800x480 HDMI touchscreen — it
 
 | Codename | Version | Status |
 |----------|---------|--------|
-| ![Bullseye](https://img.shields.io/badge/Bullseye-Debian_11-A81D33?logo=debian&logoColor=white) | Debian 11 | Legacy |
-| ![Bookworm](https://img.shields.io/badge/Bookworm-Debian_12-A81D33?logo=debian&logoColor=white) | Debian 12 | **Current Stable** |
-| ![Trixie](https://img.shields.io/badge/Trixie-Debian_13-A81D33?logo=debian&logoColor=white) | Debian 13 | Testing |
+| ![Bullseye](https://img.shields.io/badge/Bullseye-Debian_11-A81D33?logo=debian&logoColor=white) | Debian 11 | Legacy (server only) |
+| ![Bookworm](https://img.shields.io/badge/Bookworm-Debian_12-A81D33?logo=debian&logoColor=white) | Debian 12 | Oldstable |
+| ![Trixie](https://img.shields.io/badge/Trixie-Debian_13-A81D33?logo=debian&logoColor=white) | Debian 13 | **Current Stable** |
+| ![Forky](https://img.shields.io/badge/Forky-Debian_14-A81D33?logo=debian&logoColor=white) | Debian 14 | Testing preview (server only) |
 
 ### Ubuntu
 ![Ubuntu](https://img.shields.io/badge/Ubuntu-E95420?style=for-the-badge&logo=ubuntu&logoColor=white)
@@ -158,9 +160,13 @@ computer's USB port may not deliver enough current.
 
 ## Boot Logo
 
-U-Boot displays `/boot/boot.bmp` at power-on. The boot partition is FAT32, so
-the file can be replaced or deleted from any computer. Use an uncompressed
-24-bit BMP no larger than the display resolution.
+The Yumi logo is built into the U-Boot binary and drawn centered on screen the
+instant the video output initialises — no file is read from the SD card, so it
+appears immediately at power-on and the boot console runs normally alongside
+it. To change it, replace `userpatches/overlay/u-boot-logo.bmp` (8-bit
+uncompressed BMP) and rebuild U-Boot with the "Build U-Boot only" workflow.
+
+Legacy note: `boot.bmp` on the FAT partition is no longer displayed.
 
 ## First-Boot Configuration
 
