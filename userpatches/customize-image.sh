@@ -220,16 +220,18 @@ installScreensaverSetup() {
 
 
 installChromiumFlags() {
-    # Chromium's GPU process cannot create a GL context on the Mali400
-    # (lima is GLES2-only, ANGLE error 12289): windows map but render
-    # white. Force software rendering, and drop Armbian's
+    # Chromium's GPU process cannot create a usable GL context on the
+    # Mali400 (lima is GLES2-only): the viz process dies and windows
+    # render white. LIBGL_ALWAYS_SOFTWARE=1 hands it a Mesa software
+    # context instead (validated on hardware). Also drop Armbian's
     # AcceleratedVideoDecoder flags meant for SBCs with an exposed VPU
-    # (the H3 has none here).
-    echo "Install Chromium software-rendering flags ..."
+    # (the H3 has none here). Noble is not affected: its xtradeb
+    # chromium renders fine and keeps its stock configuration.
+    echo "Install Chromium software-GL environment ..."
     mkdir -p /etc/chromium.d
-    cp -v /tmp/overlay/chromium-yumi-flags /etc/chromium.d/yumi-flags
+    cp -v /tmp/overlay/yumi-mali-softgl /etc/chromium.d/yumi-mali-softgl
     rm -f /etc/chromium.d/armbian-flags
-    echo "Install Chromium software-rendering flags ... [DONE]"
+    echo "Install Chromium software-GL environment ... [DONE]"
 }
 
 installFirstBootConfig() {

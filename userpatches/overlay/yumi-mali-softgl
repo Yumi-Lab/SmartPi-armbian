@@ -1,0 +1,6 @@
+# /etc/chromium.d/yumi-mali-softgl
+# Mali400/lima ne fournit pas de contexte GL exploitable par Chromium :
+# le processus viz meurt et la fenêtre reste blanche. Rendu logiciel Mesa.
+# (Validé sur hardware SmartPi One, trixie XFCE — Ubuntu Noble n'est pas
+# concerné, son chromium xtradeb affiche correctement.)
+export LIBGL_ALWAYS_SOFTWARE=1
