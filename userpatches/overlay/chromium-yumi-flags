@@ -1,0 +1,7 @@
+# Yumi SmartPi One: force software rendering in Chromium.
+#
+# The Mali400/lima stack only provides GLES2; Chromium's GPU process
+# cannot create its backing GL context (ANGLE error 12289 "Could not
+# create a backing OpenGL context", eglInitialize EGL_NOT_INITIALIZED)
+# and every window renders white. Software rendering displays fine.
+export CHROMIUM_FLAGS="$CHROMIUM_FLAGS --disable-gpu"

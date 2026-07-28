@@ -45,6 +45,11 @@ Main() {
                 copyOnboardConf
                 patchOnboardAutostart
                 installScreensaverSetup
+                # Chromium white-window bug: trixie generation only (noble
+                # renders fine, leave it alone)
+                case "${RELEASE}" in
+                    trixie|forky|sid) installChromiumFlags ;;
+                esac
             fi
             ;;
     esac
@@ -213,6 +218,19 @@ installScreensaverSetup() {
     echo "Install screensaver configuration ... [DONE]"
 }
 
+
+installChromiumFlags() {
+    # Chromium's GPU process cannot create a GL context on the Mali400
+    # (lima is GLES2-only, ANGLE error 12289): windows map but render
+    # white. Force software rendering, and drop Armbian's
+    # AcceleratedVideoDecoder flags meant for SBCs with an exposed VPU
+    # (the H3 has none here).
+    echo "Install Chromium software-rendering flags ..."
+    mkdir -p /etc/chromium.d
+    cp -v /tmp/overlay/chromium-yumi-flags /etc/chromium.d/yumi-flags
+    rm -f /etc/chromium.d/armbian-flags
+    echo "Install Chromium software-rendering flags ... [DONE]"
+}
 
 installFirstBootConfig() {
     echo "Installing SmartPi first-boot configuration system ..."
