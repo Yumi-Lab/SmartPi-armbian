@@ -16,6 +16,14 @@ on:
         description: "Config name (without .conf), from configs-wip/ or configs/"
         required: false
         default: "smartpi1-forky-server"
+      configng_repo:
+        description: "Override the configng repo (ex: Yumi-Lab/configng) — debug only"
+        required: false
+        default: ""
+      configng_ref:
+        description: "configng ref when overridden (ex: branch:forky-nm-applet)"
+        required: false
+        default: "branch:main"
 
 jobs:
   build:
@@ -79,6 +87,18 @@ jobs:
           repository: ${{ steps.config.outputs.armbian_repository }}
           ref: ${{ steps.config.outputs.armbian_branch }}
           path: build
+
+      - name: Redirect configng to a fork (debug)
+        if: ${{ github.event.inputs.configng_repo != '' }}
+        shell: bash
+        run: |
+          # The desktop package lists come from a configng clone whose URL is
+          # hardcoded in the framework; point it at a fork to test yaml fixes
+          # (ex: the forky network-manager-applet rename) before they land
+          # upstream.
+          sed -i 's|"https://github.com/armbian/configng" "armbian-configng" "branch:main"|"https://github.com/${{ github.event.inputs.configng_repo }}" "armbian-configng" "${{ github.event.inputs.configng_ref }}"|' \
+            ./build/lib/functions/configuration/config-desktop.sh
+          grep -n "github.com/.*configng" ./build/lib/functions/configuration/config-desktop.sh | head -2
 
       - name: Create config-default.conf
         shell: bash
