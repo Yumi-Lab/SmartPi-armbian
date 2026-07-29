@@ -16,14 +16,11 @@ on:
         description: "Config name (without .conf), from configs-wip/ or configs/"
         required: false
         default: "smartpi1-forky-server"
-      configng_repo:
-        description: "Override the configng repo (ex: Yumi-Lab/configng) — debug only"
+      fix_nm_applet:
+        description: "Rename network-manager-gnome to network-manager-applet in the desktop package lists (needed for forky desktops until configng ships the fix)"
+        type: boolean
         required: false
-        default: ""
-      configng_ref:
-        description: "configng ref when overridden (ex: branch:forky-nm-applet)"
-        required: false
-        default: "branch:main"
+        default: false
 
 jobs:
   build:
@@ -88,17 +85,39 @@ jobs:
           ref: ${{ steps.config.outputs.armbian_branch }}
           path: build
 
-      - name: Redirect configng to a fork (debug)
-        if: ${{ github.event.inputs.configng_repo != '' }}
+      - name: Fix the NetworkManager applet package name in the rootfs
+        if: ${{ github.event.inputs.fix_nm_applet == 'true' }}
         shell: bash
         run: |
-          # The desktop package lists come from a configng clone whose URL is
-          # hardcoded in the framework; point it at a fork to test yaml fixes
-          # (ex: the forky network-manager-applet rename) before they land
-          # upstream.
-          sed -i 's|"https://github.com/armbian/configng" "armbian-configng" "branch:main"|"https://github.com/${{ github.event.inputs.configng_repo }}" "armbian-configng" "${{ github.event.inputs.configng_ref }}"|' \
-            ./build/lib/functions/configuration/config-desktop.sh
-          grep -n "github.com/.*configng" ./build/lib/functions/configuration/config-desktop.sh | head -2
+          # Desktop packages are installed by the armbian-config .deb from
+          # inside the chroot, using the yaml files IT ships in
+          # /usr/share/armbian-config/desktops/yaml — not the configng git
+          # clone (that one only feeds the DE picker and the cache hash), so
+          # patching the clone cannot fix package names. Insert the rename
+          # between the armbian-config install and the module_desktops call,
+          # the only window where the files exist and are not used yet.
+          python3 - <<'PY'
+          path = 'build/lib/functions/rootfs/rootfs-create.sh'
+          s = open(path).read()
+          anchor = '\t\tchroot_sdcard_apt_get_install armbian-config\n'
+          assert anchor in s, 'anchor not found: armbian-config install line moved'
+          # Runs on the build host against ${SDCARD}: no chroot quoting to
+          # get wrong, and it finds the files itself instead of hardcoding a
+          # path that the packaging could change.
+          patch = anchor + """\t\t# Yumi: Debian 14 renamed network-manager-gnome to network-manager-applet
+          \t\tdeclare -a yumi_nm_yamls=()
+          \t\tmapfile -t yumi_nm_yamls < <(grep -rl network-manager-gnome "${SDCARD}/usr/share" --include='*.yaml' 2> /dev/null || true)
+          \t\tif [[ ${#yumi_nm_yamls[@]} -gt 0 ]]; then
+          \t\t\tdisplay_alert "Yumi: renaming the NM applet package in desktop lists" "${#yumi_nm_yamls[@]} file(s)" "info"
+          \t\t\trun_host_command_logged sed -i 's/network-manager-gnome/network-manager-applet/g' "${yumi_nm_yamls[@]}"
+          \t\telse
+          \t\t\tdisplay_alert "Yumi: no network-manager-gnome reference in the rootfs yaml" "nothing to rename" "wrn"
+          \t\tfi
+          """.replace('\n          ', '\n')
+          open(path, 'w').write(s.replace(anchor, patch, 1))
+          print('rootfs-create.sh patched')
+          PY
+          sed -n '/apt_get_install armbian-config/,/^\t\tfi$/p' build/lib/functions/rootfs/rootfs-create.sh
 
       - name: Create config-default.conf
         shell: bash
