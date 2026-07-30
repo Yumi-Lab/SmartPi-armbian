@@ -9,6 +9,7 @@ on:
       - ".github/workflows/BuildImages.yml"
       - "actions/**"
       - "userpatches/**"
+      - "tools/**"
 
   pull_request:
     types: [opened, edited, reopened, synchronize]
@@ -18,6 +19,7 @@ on:
       - ".github/workflows/**"
       - "actions/**"
       - "userpatches/**"
+      - "tools/**"
 
   workflow_dispatch:
 

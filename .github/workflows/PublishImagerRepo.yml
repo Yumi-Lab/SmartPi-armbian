@@ -103,13 +103,14 @@ jobs:
               BASE="${NAME%.img.xz}"
               CODENAME=$(echo "$BASE" | sed -E 's/^Yumi-smartpi1-([a-z]+)-.*/\1/')
               PRETTY=$(pretty_release "$CODENAME")
-              FLAVOR=$(echo "$BASE" | sed -E 's/^Yumi-smartpi1-[a-z]+-[a-z0-9.]+-(server|desktop-i3|desktop|dietpi|cloudinit)-.*/\1/')
+              FLAVOR=$(echo "$BASE" | sed -E 's/^Yumi-smartpi1-[a-z]+-[a-z0-9.]+-(server|desktop-i3|desktop-mate|desktop|dietpi|cloudinit)-.*/\1/')
               case "$FLAVOR" in
-                server)     FLAVOR="Server" ;;
-                desktop)    FLAVOR="Desktop (XFCE)" ;;
-                desktop-i3) FLAVOR="Desktop (i3)" ;;
-                cloudinit)  FLAVOR="Server (cloud-init)" ;;
-                dietpi)     FLAVOR="DietPi" ;;
+                server)       FLAVOR="Server" ;;
+                desktop)      FLAVOR="Desktop (XFCE)" ;;
+                desktop-i3)   FLAVOR="Desktop (i3)" ;;
+                desktop-mate) FLAVOR="Desktop (MATE)" ;;
+                cloudinit)    FLAVOR="Server (cloud-init)" ;;
+                dietpi)       FLAVOR="DietPi" ;;
               esac
               if [[ "$FLAVOR" == "DietPi" ]]; then
                 TITLE="DietPi ${VERSION}"
