@@ -120,15 +120,24 @@ See [docs/H3-OVERCLOCK.md](docs/H3-OVERCLOCK.md) for technical details.
 
 ## Image Naming Convention
 
-All images include the distribution name and version for easy identification.
+Every image name states its distribution, its version and — for desktop images — which desktop environment it ships, so a downloaded file is identifiable on its own.
 
-### Armbian Images
 ```
 {Vendor}-{board}-{codename}-{distro_version}-{variant}-{timestamp}.img.xz
 ```
+
+| Field | Values |
+|-------|--------|
+| `variant` | `server`, or `desktop_<DE>` |
+| `<DE>` | `XFCE`, `MATE`, `i3` — always present on desktop images |
+
 **Examples:**
 - `Yumi-smartpi1-bookworm-debian12-server-2026-02-02-1234.img.xz`
-- `Yumi-smartpi1-noble-ubuntu24.04-desktop-2026-02-02-1234.img.xz`
+- `Yumi-smartpi1-trixie-debian13-desktop_XFCE-2026-02-02-1234.img.xz`
+- `Yumi-smartpi1-trixie-debian13-desktop_i3-2026-02-02-1234.img.xz`
+- `Yumi-smartpi1-forky-debian14-desktop_MATE-2026-02-02-1234.img.xz`
+
+The name comes from the config file name (`configs/{board}-{codename}-{variant}.conf`) with the distribution version inserted, so naming a config correctly is enough to name its image correctly.
 
 ## Kernel Packages (DKMS)
 
