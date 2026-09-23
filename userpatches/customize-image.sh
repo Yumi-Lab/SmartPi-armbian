@@ -28,14 +28,11 @@ Main() {
         echo "Installing dwarves (pahole) for Bullseye ... [DONE]"
     fi
 
-    # TODO: First-boot config system disabled for now (not working)
-    # Re-enable when fixed
-    # installFirstBootConfig
-
     case "${BOARD}" in
         smartpi1)
             installSmartpadDetection
             installUsbGadgetNet
+            installCloudInitDefaults
             disableSimpledrm
             forceUniversalVideoMode
             installOverclockControl
@@ -234,41 +231,17 @@ installChromiumFlags() {
     echo "Install Chromium software-GL environment ... [DONE]"
 }
 
-installFirstBootConfig() {
-    echo "Installing SmartPi first-boot configuration system ..."
-
-    # Install the config template to /boot
-    local configSrc="/tmp/overlay/smartpi-config.txt"
-    local configDest="/boot/smartpi-config.txt"
-    if [[ -f "${configSrc}" ]]; then
-        cp -v "${configSrc}" "${configDest}"
-        # Set default hostname in config based on board name
-        sed -i "s/^HOSTNAME=.*/HOSTNAME=${BOARD}/" "${configDest}"
-        chmod 644 "${configDest}"
-        echo "Config template installed to ${configDest} with HOSTNAME=${BOARD}"
-    fi
-
-    # Install the first-boot script
-    local scriptSrc="/tmp/overlay/smartpi-firstboot.sh"
-    local scriptDest="/usr/local/bin/smartpi-firstboot.sh"
-    if [[ -f "${scriptSrc}" ]]; then
-        cp -v "${scriptSrc}" "${scriptDest}"
-        chmod 755 "${scriptDest}"
-        echo "First-boot script installed to ${scriptDest}"
-    fi
-
-    # Install the systemd service
-    local serviceSrc="/tmp/overlay/smartpi-firstboot.service"
-    local serviceDest="/etc/systemd/system/smartpi-firstboot.service"
-    if [[ -f "${serviceSrc}" ]]; then
-        cp -v "${serviceSrc}" "${serviceDest}"
-        chmod 644 "${serviceDest}"
-        # Enable the service
-        systemctl enable smartpi-firstboot.service
-        echo "First-boot service installed and enabled"
-    fi
-
-    echo "SmartPi first-boot configuration system ... [DONE]"
+installCloudInitDefaults() {
+    # Armbian's cloud-init extension (ENABLE_EXTENSIONS in config-default.conf)
+    # ships a /boot/user-data that only sets a hostname, and disables the
+    # interactive first-login wizard — flashed as-is, the image would boot
+    # with no user account. Ship a default one instead. Raspberry Pi Imager
+    # replaces this file wholesale when the flash is customized, and it can
+    # be edited by hand from any computer before the first boot.
+    echo "Install cloud-init default user-data ..."
+    cp -v /tmp/overlay/cloud-init-user-data /boot/user-data
+    chmod 644 /boot/user-data
+    echo "Install cloud-init default user-data ... [DONE]"
 }
 
 Main "$@"
