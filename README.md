@@ -196,7 +196,9 @@ The easiest way to fill them is the customization screen of Raspberry Pi Imager
 | `root` | `yumi` | |
 
 Change them after the first login. Armbian's interactive first-login wizard is
-disabled — cloud-init replaces it.
+disabled — cloud-init replaces it. Network interfaces keep the classic names
+`eth0` / `wlan0` (`net.ifnames=0`), the ones Raspberry Pi Imager writes in
+`network-config`.
 
 ## Raspberry Pi Imager
 
