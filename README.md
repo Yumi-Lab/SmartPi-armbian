@@ -19,6 +19,7 @@ Custom Armbian image builder for SmartPi devices by **[Yumi Lab](https://www.yum
 - **Works on any screen up to 4K UHD** (since v1.8.0) — display fixed at 1280x720@60, accepted and upscaled by every screen from the SmartPad panel to 4K monitors
 - **H3 CPU overclock to 1368 MHz** (since v1.8.0) — explicit opt-in through `sudo smartpi-oc on` (stock 1296 MHz with the adaptive governor by default)
 - **SSH over the USB OTG port** (since v1.8.0) — one cable powers the board and provides network access (NCM gadget: Linux, Windows 11, macOS)
+- **Automatic file system repair at boot** — the kernel command line carries `fsck.repair=yes` (the Raspberry Pi OS default), so a card left dirty by a power cut is repaired instead of dropping to a rescue shell, and the FAT boot partition is mounted `nofail`, so a damaged `/boot` cannot block the boot once the kernel is loaded
 - **Kernel headers pre-installed** — compile and load kernel modules directly on the board (WiFi drivers, DKMS modules) without a cross-compilation setup
 - **12 images** built automatically for 6 distros (single `smartpi1` board, also used on SmartPad), flashable through Raspberry Pi Imager with the Yumi repository
 
