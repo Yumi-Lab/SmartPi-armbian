@@ -21,3 +21,17 @@ function pre_config_uboot_target__smartpi1_yumi_logo() {
 	run_host_command_logged cp -v "${logo}" drivers/video/u_boot_logo.bmp
 	run_host_command_logged cp -v "${logo}" tools/logos/u-boot_logo.bmp
 }
+
+# A damaged /boot must not stop the boot. Armbian lists the FAT partition in
+# fstab with a fsck pass and without nofail, so when fsck.fat gives up systemd
+# drops to emergency mode even though the kernel and initramfs it needed were
+# already loaded from that very partition. FAT has no journal and /boot is
+# written at run time (kernel and initramfs updates, armbian-firstrun,
+# smartpi-oc), so a power cut can leave it dirty.
+# Done on the final image: /etc/fstab does not exist yet when
+# customize-image.sh runs (prepare_partitions comes after customize_image).
+function pre_umount_final_image__smartpi1_boot_nofail() {
+	display_alert "fstab for ${BOARD}" "mount /boot with nofail" "info"
+	sed -i '/[[:space:]]\/boot[[:space:]]/ s/defaults/defaults,nofail/' "${MOUNT}/etc/fstab"
+	run_host_command_logged grep /boot "${MOUNT}/etc/fstab"
+}
