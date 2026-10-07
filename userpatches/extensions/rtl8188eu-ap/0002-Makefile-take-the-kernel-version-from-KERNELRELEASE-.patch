@@ -1,0 +1,27 @@
+From b6f31ee2015958ef42cc7cbf0e11e787c0a1915f Mon Sep 17 00:00:00 2001
+From: Yumi-Lab <nicolas@yumi-lab.com>
+Date: Wed, 7 Oct 2026 23:29:11 +0800
+Subject: [PATCH 2/3] Makefile: take the kernel version from KERNELRELEASE, not
+ uname -r
+
+The 6.15+ check that hands EXTRA_CFLAGS over to ccflags-y (kbuild no longer
+reads EXTRA_CFLAGS) runs inside kbuild, where KERNELRELEASE is the kernel
+being built. uname -r is the build host's kernel: cross-compiling a 6.18
+module on a 6.8 host dropped every -I and failed on drv_types.h.
+---
+ Makefile | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/Makefile b/Makefile
+index 1c60f49..6706e75 100644
+--- a/Makefile
++++ b/Makefile
+@@ -2050,7 +2050,7 @@ endif
+ obj-$(CONFIG_RTL8188EU) := $(MODULE_NAME).o
+ 
+ # Support for kernel 6.15+ configuration
+-KVER = $(shell uname -r)
++KVER = $(KERNELRELEASE)
+ KMAJ = $(shell echo $(KVER) | \
+ sed -e 's/^\([0-9][0-9]*\)\.[0-9][0-9]*\.[0-9][0-9]*.*/\1/')
+ KMIN = $(shell echo $(KVER) | \

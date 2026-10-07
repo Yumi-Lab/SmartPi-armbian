@@ -7,6 +7,9 @@ MODULES_CURRENT="g_ncm"
 SERIALCON="ttyS0"
 KERNEL_TARGET="legacy,current,edge"
 
+# 8188eu driver so RTL8188EUS dongles can run as an access point (userpatches/extensions/).
+enable_extension "rtl8188eu-ap"
+
 # Replace U-Boot's built-in logo with the Yumi one. It is drawn the instant the
 # video device is probed — before any file is read from the SD card — so it
 # appears immediately, unlike /boot/boot.bmp which the boot script displays
