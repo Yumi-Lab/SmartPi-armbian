@@ -1,0 +1,24 @@
+From 1632ee1a5d0c34e80a5c2090c532a6547818a1ca Mon Sep 17 00:00:00 2001
+From: Yumi-Lab <nicolas@yumi-lab.com>
+Date: Wed, 7 Oct 2026 23:29:11 +0800
+Subject: [PATCH 1/3] Kconfig: use 'help', '---help---' is rejected since Linux
+ 5.8
+
+Only the in-tree build reads this Kconfig, and its parser no longer accepts
+the old spelling.
+---
+ Kconfig | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/Kconfig b/Kconfig
+index 013175c..8aa24b1 100644
+--- a/Kconfig
++++ b/Kconfig
+@@ -1,6 +1,6 @@
+ config RTL8188EU
+ 	tristate "Realtek 8188E USB WiFi"
+ 	depends on USB
+-	---help---
++	help
+ 	  Help message of RTL8188EU
+ 

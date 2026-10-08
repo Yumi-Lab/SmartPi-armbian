@@ -1,0 +1,26 @@
+From 4c3acb8d92c86717c07309f9dd5708c4b8694107 Mon Sep 17 00:00:00 2001
+From: Yumi-Lab <nicolas@yumi-lab.com>
+Date: Wed, 7 Oct 2026 23:29:11 +0800
+Subject: [PATCH 3/3] cfg80211: set_monitor_channel takes a net_device from
+ 6.12.101 on
+
+The 6.13 change "wifi: cfg80211: pass net_device to .set_monitor_channel"
+was backported to 6.12.101 (stable commit 4dae80dd259b), so 6.12.101 and
+later fail to build with the 6.13 guard.
+---
+ os_dep/linux/ioctl_cfg80211.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/os_dep/linux/ioctl_cfg80211.c b/os_dep/linux/ioctl_cfg80211.c
+index 80daf1b..f581272 100644
+--- a/os_dep/linux/ioctl_cfg80211.c
++++ b/os_dep/linux/ioctl_cfg80211.c
+@@ -5769,7 +5769,7 @@ static int	cfg80211_rtw_set_channel(struct wiphy *wiphy
+ }
+ 
+ static int cfg80211_rtw_set_monitor_channel(struct wiphy *wiphy
+-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 13, 0))
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 101))
+ 	, struct net_device *dev
+ #endif
+ #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0))
