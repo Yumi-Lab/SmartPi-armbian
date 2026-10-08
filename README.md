@@ -78,7 +78,7 @@ The SmartPad is a SmartPi One fitted with a 4.3" 800x480 HDMI touchscreen — it
 | ![Bullseye](https://img.shields.io/badge/Bullseye-Debian_11-A81D33?logo=debian&logoColor=white) | Debian 11 | Legacy (server only) |
 | ![Bookworm](https://img.shields.io/badge/Bookworm-Debian_12-A81D33?logo=debian&logoColor=white) | Debian 12 | Oldstable |
 | ![Trixie](https://img.shields.io/badge/Trixie-Debian_13-A81D33?logo=debian&logoColor=white) | Debian 13 | **Current Stable** |
-| ![Forky](https://img.shields.io/badge/Forky-Debian_14-A81D33?logo=debian&logoColor=white) | Debian 14 | Testing preview |
+| ![Forky](https://img.shields.io/badge/Forky-Debian_14-A81D33?logo=debian&logoColor=white) | Debian 14 | Testing preview (desktops ship Firefox ESR: Debian 14 no longer builds Chromium for armhf) |
 
 ### Ubuntu
 ![Ubuntu](https://img.shields.io/badge/Ubuntu-E95420?style=for-the-badge&logo=ubuntu&logoColor=white)
