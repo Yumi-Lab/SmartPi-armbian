@@ -1,0 +1,10 @@
+[Unit]
+Description=Yumi boot telemetry (one line per boot, FAT copy on power cuts and repairs)
+After=local-fs.target systemd-journald.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/yumi-bootlog
+
+[Install]
+WantedBy=multi-user.target
