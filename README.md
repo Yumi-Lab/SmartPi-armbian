@@ -7,7 +7,7 @@
 # SmartPi-armbian
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![Version](https://img.shields.io/badge/Version-1.8.0--rc4-green.svg)](https://github.com/Yumi-Lab/SmartPi-armbian/releases)
+[![Version](https://img.shields.io/badge/Version-1.8.0--rc6-green.svg)](https://github.com/Yumi-Lab/SmartPi-armbian/releases)
 [![Build Images](https://github.com/Yumi-Lab/SmartPi-armbian/actions/workflows/BuildImages.yml/badge.svg)](https://github.com/Yumi-Lab/SmartPi-armbian/actions/workflows/BuildImages.yml)
 [![Wiki](https://img.shields.io/badge/Wiki-Documentation-orange?logo=gitbook&logoColor=white)](https://wiki.yumi-lab.com)
 
