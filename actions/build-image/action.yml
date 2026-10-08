@@ -70,7 +70,7 @@ runs:
     - name: Fix the NetworkManager applet package name for Debian 14
       shell: bash
       run: |
-        bash ./build-configs/tools/fix-nm-applet-in-framework.sh ./build
+        bash ./build-configs/tools/fix-forky-desktop-in-framework.sh ./build
 
     - name: Add custom board configuration
       shell: bash
