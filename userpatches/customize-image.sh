@@ -39,6 +39,7 @@ Main() {
             disableSimpledrm
             forceUniversalVideoMode
             installOverclockControl
+            autoRepairFilesystems
             if [[ "${BUILD_DESKTOP}" = "yes" ]]; then
                 installRotationScript
                 patchLightdm
@@ -86,13 +87,7 @@ disableSimpledrm() {
     # a modprobe.d rule may never reach early boot.
     echo "Disable simpledrm (conflicts with sun4i-drm) ..."
     echo "blacklist simpledrm" > /etc/modprobe.d/smartpi-no-simpledrm.conf
-    local bootcfg="/boot/armbianEnv.txt"
-    if grep -q "^extraargs=" "${bootcfg}" 2>/dev/null; then
-        sed -i "s|^extraargs=\(.*\)|extraargs=\1 module_blacklist=simpledrm|" "${bootcfg}"
-    else
-        echo "extraargs=module_blacklist=simpledrm" >> "${bootcfg}"
-    fi
-    grep "^extraargs=" "${bootcfg}"
+    addKernelArg module_blacklist=simpledrm
     echo "Disable simpledrm ... [DONE]"
 }
 
@@ -105,14 +100,20 @@ forceUniversalVideoMode() {
     # The forced mode lands FIRST in the DRM mode list, which is why
     # smartpad-detect.sh scans the whole list instead of the first entry.
     echo "Force universal 720p video mode (4K screen compatibility) ..."
+    addKernelArg video=HDMI-A-1:1280x720@60
+    echo "Force universal 720p video mode ... [DONE]"
+}
+
+addKernelArg() {
+    # Append one argument to the extraargs= line of armbianEnv.txt (created if
+    # missing); U-Boot passes it on the kernel command line.
     local bootcfg="/boot/armbianEnv.txt"
     if grep -q "^extraargs=" "${bootcfg}" 2>/dev/null; then
-        sed -i "s|^extraargs=\(.*\)|extraargs=\1 video=HDMI-A-1:1280x720@60|" "${bootcfg}"
+        sed -i "s|^extraargs=\(.*\)|extraargs=\1 $1|" "${bootcfg}"
     else
-        echo "extraargs=video=HDMI-A-1:1280x720@60" >> "${bootcfg}"
+        echo "extraargs=$1" >> "${bootcfg}"
     fi
     grep "^extraargs=" "${bootcfg}"
-    echo "Force universal 720p video mode ... [DONE]"
 }
 
 installOverclockControl() {
@@ -130,6 +131,18 @@ installOverclockControl() {
     cp -v /tmp/overlay/smartpi-oc /usr/local/bin/smartpi-oc
     chmod 755 /usr/local/bin/smartpi-oc
     echo "Install overclock control ... [DONE]"
+}
+
+autoRepairFilesystems() {
+    # Pulling the plug is how users switch the board off, so file systems
+    # routinely come back dirty. Without this flag the initramfs runs fsck in
+    # preen mode (-a) and stops on "requires a manual fsck" for anything it
+    # will not fix on its own: headless, that is a dead card to reflash.
+    # fsck.repair=yes answers yes to every repair, the default Raspberry Pi OS
+    # ships in cmdline.txt; systemd-fsck applies it to the FAT /boot as well.
+    echo "Repair file systems automatically at boot ..."
+    addKernelArg fsck.repair=yes
+    echo "Repair file systems automatically at boot ... [DONE]"
 }
 
 installUsbGadgetNet() {
