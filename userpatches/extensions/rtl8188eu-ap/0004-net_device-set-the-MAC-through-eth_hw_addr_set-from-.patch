@@ -1,0 +1,124 @@
+From 3f3287e2d47964f345925291ad5dc09f56422954 Mon Sep 17 00:00:00 2001
+From: Yumi-Lab <nicolas@yumi-lab.com>
+Date: Sat, 10 Oct 2026 02:26:44 +0800
+Subject: [PATCH] net_device: set the MAC through eth_hw_addr_set from Linux
+ 5.17 on
+
+Since 5.17 netdev->dev_addr is const and the kernel keeps its own copy
+of the address. Writing the buffer directly leaves that copy at zero,
+and dev_addr_check() warns "Incorrect netdev->dev_addr" with a stack
+trace every time the interface is configured (seen on 6.18.55 with an
+RTL8188EUS dongle, at boot and at each NetworkManager reconfiguration).
+Route the seven writes through one helper that uses eth_hw_addr_set()
+on 5.17 and later and keeps the plain copy before.
+---
+ include/osdep_service_linux.h | 10 ++++++++++
+ os_dep/linux/ioctl_linux.c    |  2 +-
+ os_dep/linux/mlme_linux.c     |  2 +-
+ os_dep/linux/os_intfs.c       |  8 ++++----
+ os_dep/osdep_service.c        |  2 +-
+ 5 files changed, 17 insertions(+), 7 deletions(-)
+
+diff --git a/include/osdep_service_linux.h b/include/osdep_service_linux.h
+index cced2d8..1df6dce 100644
+--- a/include/osdep_service_linux.h
++++ b/include/osdep_service_linux.h
+@@ -43,6 +43,16 @@
+ #include <linux/sem.h>
+ #include <linux/sched.h>
+ #include <linux/etherdevice.h>
++
++/* Since Linux 5.17 netdev->dev_addr is const and the kernel keeps its own
++ * copy of the address: writing the buffer directly leaves that copy at zero
++ * and dev_addr_check() warns "Incorrect netdev->dev_addr" with a stack trace
++ * every time the interface is configured. Go through eth_hw_addr_set(). */
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 17, 0)
++#define rtw_netdev_set_hw_addr(ndev, mac) eth_hw_addr_set((ndev), (mac))
++#else
++#define rtw_netdev_set_hw_addr(ndev, mac) _rtw_memcpy((void *)(ndev)->dev_addr, (mac), ETH_ALEN)
++#endif
+ #include <linux/wireless.h>
+ #include <net/iw_handler.h>
+ #include <net/addrconf.h>
+diff --git a/os_dep/linux/ioctl_linux.c b/os_dep/linux/ioctl_linux.c
+index 6a6f021..d124203 100644
+--- a/os_dep/linux/ioctl_linux.c
++++ b/os_dep/linux/ioctl_linux.c
+@@ -9788,7 +9788,7 @@ static int rtw_mp_efuse_set(struct net_device *dev,
+ 		rtw_hal_read_chip_info(padapter);
+ 		/* set mac addr*/
+ 		rtw_macaddr_cfg(adapter_mac_addr(padapter), get_hal_mac_addr(padapter));
+-		_rtw_memcpy((void*)padapter->pnetdev->dev_addr, get_hal_mac_addr(padapter), ETH_ALEN); /* set mac addr to net_device */
++		rtw_netdev_set_hw_addr(padapter->pnetdev, get_hal_mac_addr(padapter)); /* set mac addr to net_device */
+ 
+ #ifdef CONFIG_P2P
+ 		rtw_init_wifidirect_addrs(padapter, adapter_mac_addr(padapter), adapter_mac_addr(padapter));
+diff --git a/os_dep/linux/mlme_linux.c b/os_dep/linux/mlme_linux.c
+index 418fd69..24aac0b 100644
+--- a/os_dep/linux/mlme_linux.c
++++ b/os_dep/linux/mlme_linux.c
+@@ -398,7 +398,7 @@ int hostapd_mode_init(_adapter *padapter)
+ 	mac[4] = 0x11;
+ 	mac[5] = 0x12;
+ 
+-	_rtw_memcpy(pnetdev->dev_addr, mac, ETH_ALEN);
++	rtw_netdev_set_hw_addr(pnetdev, mac);
+ 
+ 
+ 	rtw_netif_carrier_off(pnetdev);
+diff --git a/os_dep/linux/os_intfs.c b/os_dep/linux/os_intfs.c
+index 73e06e6..9db18b4 100644
+--- a/os_dep/linux/os_intfs.c
++++ b/os_dep/linux/os_intfs.c
+@@ -1196,7 +1196,7 @@ static int rtw_net_set_mac_address(struct net_device *pnetdev, void *addr)
+ 	}
+ 
+ 	_rtw_memcpy(adapter_mac_addr(padapter), sa->sa_data, ETH_ALEN); /* set mac addr to adapter */
+-	_rtw_memcpy((void*)pnetdev->dev_addr, sa->sa_data, ETH_ALEN); /* set mac addr to net_device */
++	rtw_netdev_set_hw_addr(pnetdev, sa->sa_data); /* set mac addr to net_device */
+ 
+ #if 0
+ 	if (rtw_is_hw_init_completed(padapter))
+@@ -1629,7 +1629,7 @@ int rtw_os_ndev_register(_adapter *adapter, const char *name)
+ 	/* alloc netdev name */
+ 	rtw_init_netdev_name(ndev, name);
+ 
+-	_rtw_memcpy((void*)ndev->dev_addr, adapter_mac_addr(adapter), ETH_ALEN);
++	rtw_netdev_set_hw_addr(ndev, adapter_mac_addr(adapter));
+ #if defined(CONFIG_NET_NS)
+     dev_net_set(ndev, wiphy_net(adapter_to_wiphy(adapter)));
+ #endif //defined(CONFIG_NET_NS)
+@@ -2572,7 +2572,7 @@ int _netdev_vir_if_open(struct net_device *pnetdev)
+ 		rtw_mbid_camid_alloc(padapter, adapter_mac_addr(padapter));
+ #endif
+ 		rtw_init_wifidirect_addrs(padapter, adapter_mac_addr(padapter), adapter_mac_addr(padapter));
+-		_rtw_memcpy(pnetdev->dev_addr, adapter_mac_addr(padapter), ETH_ALEN);
++		rtw_netdev_set_hw_addr(pnetdev, adapter_mac_addr(padapter));
+ 	}
+ #endif /*CONFIG_PLATFORM_INTEL_BYT*/
+ 
+@@ -3219,7 +3219,7 @@ int _netdev_open(struct net_device *pnetdev)
+ 		rtw_mbid_camid_alloc(padapter, adapter_mac_addr(padapter));
+ #endif
+ 		rtw_init_wifidirect_addrs(padapter, adapter_mac_addr(padapter), adapter_mac_addr(padapter));
+-		_rtw_memcpy(pnetdev->dev_addr, adapter_mac_addr(padapter), ETH_ALEN);
++		rtw_netdev_set_hw_addr(pnetdev, adapter_mac_addr(padapter));
+ #endif /* CONFIG_PLATFORM_INTEL_BYT */
+ 
+ 		rtw_clr_surprise_removed(padapter);
+diff --git a/os_dep/osdep_service.c b/os_dep/osdep_service.c
+index 444ab37..af191af 100644
+--- a/os_dep/osdep_service.c
++++ b/os_dep/osdep_service.c
+@@ -2450,7 +2450,7 @@ int rtw_change_ifname(_adapter *padapter, const char *ifname)
+ 
+ 	rtw_init_netdev_name(pnetdev, ifname);
+ 
+-	_rtw_memcpy((void*)pnetdev->dev_addr, adapter_mac_addr(padapter), ETH_ALEN);
++	rtw_netdev_set_hw_addr(pnetdev, adapter_mac_addr(padapter));
+ 
+ 	if (rtnl_lock_needed)
+ 		ret = register_netdev(pnetdev);
+-- 
+2.39.5 (Apple Git-154)
+
