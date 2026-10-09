@@ -1,0 +1,39 @@
+#!/bin/sh
+# One line per boot in /var/lib/yumi/boot.log (ext4). Copied to /boot/yumi-boot.log
+# (FAT, readable from any PC) only when the boot followed a power cut, a repair or
+# an unclear fsck: a clean boot writes nothing to the FAT partition.
+# A boot that never got here (fsck gave up, card unreadable) leaves no line: it
+# shows as a gap in the counter.
+LOG=/var/lib/yumi/boot.log
+FAT=/boot/yumi-boot.log
+mkdir -p /var/lib/yumi
+last=$(tail -n 1 "$LOG" 2>/dev/null | cut -d' ' -f1)
+n=$(( ${last:-0} + 1 ))
+
+# initramfs-tools leaves fsck's output in fsck.log and a stamp file when fsck
+# returned 0 or 1 (clean, or errors corrected).
+shut=clean
+grep -qs 'recovering journal' /run/initramfs/fsck.log && shut=UNCLEAN
+if [ -e /run/initramfs/fsck-root ]; then
+    if grep -qsE 'FIXED|Fix\? yes|Clear\? yes|Salvage\? yes|Recreate\? yes' /run/initramfs/fsck.log; then
+        root=repaired
+    else
+        root=clean
+    fi
+elif [ -s /run/initramfs/fsck.log ]; then
+    root=doubtful
+else
+    root=unchecked
+fi
+boot=$(journalctl -b -o cat -u 'systemd-fsck@*' 2>/dev/null | grep -iE 'error|differ|fixed|clean' | tail -n 1)
+card=$(cat /sys/block/mmcblk0/device/name /sys/block/mmcblk0/device/serial 2>/dev/null | tr '\n' ':')
+line="$n shutdown=$shut root_fsck=$root boot_fsck=\"${boot:-n/a}\" card=$card"
+echo "$line" >> "$LOG"
+
+case "$shut$root" in
+    *UNCLEAN*|*repaired*|*doubtful*)
+        # /boot is mounted nofail: skip the FAT copy when it is not there.
+        mountpoint -q /boot || exit 0
+        { tail -n 499 "$FAT" 2>/dev/null; echo "$line"; } > "$FAT.tmp" && mv -f "$FAT.tmp" "$FAT" && sync
+        ;;
+esac

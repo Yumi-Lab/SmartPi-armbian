@@ -40,6 +40,8 @@ Main() {
             forceUniversalVideoMode
             installOverclockControl
             autoRepairFilesystems
+            hardenAgainstPowerCuts
+            installBootTelemetry
             if [[ "${BUILD_DESKTOP}" = "yes" ]]; then
                 installRotationScript
                 patchLightdm
@@ -143,6 +145,42 @@ autoRepairFilesystems() {
     echo "Repair file systems automatically at boot ..."
     addKernelArg fsck.repair=yes
     echo "Repair file systems automatically at boot ... [DONE]"
+}
+
+hardenAgainstPowerCuts() {
+    # Boards live inside printers and get hard power cuts; three more in-place
+    # settings, no layout change. The ext4 data mode is fixed in the superblock
+    # of the final image (boards/smartpi1.wip), out of reach of this script.
+    # - panic=10: a kernel panic, or the initramfs stopping on a root it cannot
+    #   mount, reboots after 10 s instead of waiting forever on a console nobody
+    #   watches.
+    # - journal in RAM: Debian creates /var/log/journal, so journald is
+    #   persistent, and armbian-ramlog moves that journal to /var/log.hdd on the
+    #   card, written continuously. The current boot's log stays in /run.
+    # - hardware watchdog: sunxi_wdt is built in (16 s maximum); PID 1 pings it
+    #   every 8 s, so a hung system resets itself. RebootWatchdogSec stays off:
+    #   the driver cannot go beyond 16 s and the sync in systemd-shutdown may
+    #   take longer than that without a ping.
+    echo "Harden against hard power cuts ..."
+    addKernelArg panic=10
+    mkdir -p /etc/systemd/journald.conf.d /etc/systemd/system.conf.d
+    printf '[Journal]\nStorage=volatile\nRuntimeMaxUse=32M\n' > /etc/systemd/journald.conf.d/10-smartpi-journal.conf
+    printf '[Manager]\nRuntimeWatchdogSec=16\nRebootWatchdogSec=off\n' > /etc/systemd/system.conf.d/10-smartpi-watchdog.conf
+    echo "Harden against hard power cuts ... [DONE]"
+}
+
+installBootTelemetry() {
+    # One line per boot in /var/lib/yumi/boot.log, copied to /boot/yumi-boot.log
+    # (FAT, readable from any PC) only after a power cut or a repair. Says which
+    # failure class kills a card before investing in a read-only root or in
+    # industrial cards.
+    echo "Install boot telemetry (yumi-bootlog) ..."
+    cp -v /tmp/overlay/yumi-bootlog /usr/local/bin/yumi-bootlog
+    chmod 755 /usr/local/bin/yumi-bootlog
+    cp -v /tmp/overlay/yumi-bootlog.service /etc/systemd/system/yumi-bootlog.service
+    chmod 644 /etc/systemd/system/yumi-bootlog.service
+    systemctl enable yumi-bootlog.service
+    echo "Install boot telemetry (yumi-bootlog) ... [DONE]"
 }
 
 installUsbGadgetNet() {

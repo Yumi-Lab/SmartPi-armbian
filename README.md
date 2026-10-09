@@ -19,7 +19,7 @@ Custom Armbian image builder for SmartPi devices by **[Yumi Lab](https://www.yum
 - **Works on any screen up to 4K UHD** (since v1.8.0) — display fixed at 1280x720@60, accepted and upscaled by every screen from the SmartPad panel to 4K monitors
 - **H3 CPU overclock to 1368 MHz** (since v1.8.0) — explicit opt-in through `sudo smartpi-oc on` (stock 1296 MHz with the adaptive governor by default)
 - **SSH over the USB OTG port** (since v1.8.0) — one cable powers the board and provides network access (NCM gadget: Linux, Windows 11, macOS)
-- **Automatic file system repair at boot** — the kernel command line carries `fsck.repair=yes` (the Raspberry Pi OS default), so a card left dirty by a power cut is repaired instead of dropping to a rescue shell, and the FAT boot partition is mounted `nofail`, so a damaged `/boot` cannot block the boot once the kernel is loaded
+- **Hardened against power cuts** — file systems are repaired automatically at boot (`fsck.repair=yes`, the Raspberry Pi OS default), a damaged FAT `/boot` cannot block the boot (`nofail`), the ext4 root runs in `data=ordered` with `errors=remount-ro` instead of Armbian's writeback default, a hang or a panic reboots by itself (`panic=10`, hardware watchdog), the journal stays in RAM, and `/boot/yumi-boot.log` records every unclean shutdown and repair, readable from any PC
 - **Kernel headers pre-installed** — compile and load kernel modules directly on the board (WiFi drivers, DKMS modules) without a cross-compilation setup
 - **12 images** built automatically for 6 distros (single `smartpi1` board, also used on SmartPad), flashable through Raspberry Pi Imager with the Yumi repository
 
@@ -177,6 +177,18 @@ it. To change it, replace `userpatches/overlay/u-boot-logo.bmp` (8-bit
 uncompressed BMP) and rebuild U-Boot with the "Build U-Boot only" workflow.
 
 Legacy note: `boot.bmp` on the FAT partition is no longer displayed.
+
+## Power Cuts and SD Cards
+
+Boards get unplugged rather than shut down, so the images are hardened in place, without changing the partition layout:
+
+- `fsck.repair=yes` on the kernel command line: the initramfs repairs the root file system instead of stopping on "requires a manual fsck"; systemd-fsck does the same for the FAT boot partition.
+- `/boot` is mounted `nofail`: once the kernel is loaded, a damaged FAT partition does not block the boot.
+- The ext4 root is set to `data=ordered` and `errors=remount-ro` in its superblock. Armbian builds every root in `data=writeback`, where a file written just before a power cut can come back filled with stale blocks.
+- `panic=10` and the H3 hardware watchdog (16 s, pinged by systemd): a panic or a hang reboots the board instead of waiting forever.
+- The systemd journal stays in RAM (`Storage=volatile`); Armbian would otherwise write it to the card continuously.
+
+`yumi-bootlog` writes one line per boot to `/var/lib/yumi/boot.log` and, only after a power cut or a repair, to `/boot/yumi-boot.log` on the FAT partition. From any PC, `grep -c UNCLEAN yumi-boot.log` on that partition tells how many times the board was cut, and `root_fsck=repaired` lines show what fsck had to fix. Before reflashing a card that no longer boots, run `fsck.ext4 -n` on its second partition from a Linux PC: repairable errors mean the software path applies; a card that reads back zeros or turns read-only is a card or power supply problem.
 
 ## First-Boot Configuration
 

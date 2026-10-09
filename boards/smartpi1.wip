@@ -38,3 +38,18 @@ function pre_umount_final_image__smartpi1_boot_nofail() {
 	sed -i '/[[:space:]]\/boot[[:space:]]/ s/defaults/defaults,nofail/' "${MOUNT}/etc/fstab"
 	run_host_command_logged grep /boot "${MOUNT}/etc/fstab"
 }
+
+# Armbian puts every ext4 root in data=writeback (tune2fs in its partitioning.sh)
+# and leaves errors=continue in the superblock. After a power cut, writeback
+# lets a file written just before come back filled with stale blocks
+# (printer.cfg, dpkg status), and continue keeps writing on a corrupted
+# structure. Fixed in the superblock rather than on the kernel command line so
+# it survives anyone rewriting extraargs or fstab (the DietPi installer does
+# both). Runs after the final unmount, while the loop device is still attached;
+# the root is the second partition on this board (FAT /boot first). A wrong
+# partition would make tune2fs fail loudly on a bad superblock magic.
+function post_umount_final_image__smartpi1_ext4_ordered() {
+	display_alert "ext4 root for ${BOARD}" "data=ordered, errors=remount-ro in the superblock" "info"
+	run_host_command_logged tune2fs -o ^journal_data_writeback -e remount-ro "${LOOP}p2"
+	run_host_command_logged dumpe2fs -h "${LOOP}p2" "|" grep -E "'Default mount options|Errors behavior'"
+}
