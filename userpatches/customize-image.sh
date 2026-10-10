@@ -296,14 +296,20 @@ installChromiumFlags() {
 installCloudInitDefaults() {
     # Armbian's cloud-init extension (ENABLE_EXTENSIONS in config-default.conf)
     # ships a /boot/user-data that only sets a hostname, and disables the
-    # interactive first-login wizard — flashed as-is, the image would boot
-    # with no user account. Ship a default one instead. Raspberry Pi Imager
-    # replaces this file wholesale when the flash is customized, and it can
-    # be edited by hand from any computer before the first boot.
-    echo "Install cloud-init default user-data ..."
+    # interactive first-login wizard: flashed as-is, the image would boot
+    # with no user account. Ship one that creates pi / yumi and sets root /
+    # yumi, in plain text so anyone can change them from a computer before
+    # the first boot (it blanks them once applied), and a network-config with
+    # a ready WiFi block, the way Raspberry Pi OS ships them. Raspberry Pi
+    # Imager replaces both files when the flash is customized. Armbian's
+    # user-data.template creates an "armbian" user with an SSH key and
+    # resizes an LVM volume: copied by mistake it locks people out, so it goes.
+    echo "Install cloud-init first-boot files ..."
     cp -v /tmp/overlay/cloud-init-user-data /boot/user-data
-    chmod 644 /boot/user-data
-    echo "Install cloud-init default user-data ... [DONE]"
+    cp -v /tmp/overlay/cloud-init-network-config /boot/network-config
+    chmod 644 /boot/user-data /boot/network-config
+    rm -fv /boot/user-data.template
+    echo "Install cloud-init first-boot files ... [DONE]"
 }
 
 Main "$@"

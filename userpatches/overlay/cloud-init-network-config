@@ -1,0 +1,19 @@
+# Network of this SmartPi, applied on the first boot. Ethernet works as is.
+# WiFi: delete the "#" at the start of the 7 lines below, then put your
+# network name and its password between the quotes. Keep the spaces at the
+# start of the lines. Raspberry Pi Imager writes this file for you when you
+# set a WiFi network in its customization screen.
+version: 2
+ethernets:
+  all-ethernets:
+    dhcp4: true
+    optional: true
+    match:
+      name: "en*,eth*"
+#wifis:
+#  wlan0:
+#    dhcp4: true
+#    optional: true
+#    access-points:
+#      "MyWifiName":
+#        password: "MyWifiPassword"
