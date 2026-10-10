@@ -196,7 +196,8 @@ Boards get unplugged rather than shut down, so the images are hardened in place,
 The images ship with [cloud-init](https://cloudinit.readthedocs.io/) (Armbian's
 native `cloud-init` extension, NoCloud datasource): the first boot is configured
 by plain-text files on the FAT boot partition, which any computer can edit before
-the card goes into the board — `user-data` (hostname, users, SSH),
+the card goes into the board (it is tagged FAT32, so Windows and macOS mount it
+like a Raspberry Pi OS card) — `user-data` (hostname, users, SSH),
 `network-config` (Ethernet/WiFi, [netplan v2 format](https://cloudinit.readthedocs.io/en/latest/reference/network-config-format-v2.html))
 and `meta-data`. The `*.template` files next to them show the syntax.
 
