@@ -28,16 +28,14 @@ Main() {
         echo "Installing dwarves (pahole) for Bullseye ... [DONE]"
     fi
 
-    # TODO: First-boot config system disabled for now (not working)
-    # Re-enable when fixed
-    # installFirstBootConfig
-
     case "${BOARD}" in
         smartpi1)
             installSmartpadDetection
             installUsbGadgetNet
+            installCloudInitDefaults
             disableSimpledrm
             forceUniversalVideoMode
+            useClassicNetNames
             installOverclockControl
             autoRepairFilesystems
             hardenAgainstPowerCuts
@@ -116,6 +114,16 @@ addKernelArg() {
         echo "extraargs=$1" >> "${bootcfg}"
     fi
     grep "^extraargs=" "${bootcfg}"
+}
+
+useClassicNetNames() {
+    # Raspberry Pi Imager's cloud-init network-config hardcodes eth0 and wlan0
+    # (the names Raspberry Pi OS uses). With systemd's predictable names the SoC
+    # Ethernet is end0 and a USB WiFi dongle wlx<mac>, so a WiFi network set at
+    # flash time would never match its interface and never come up.
+    echo "Use classic network interface names (eth0/wlan0) ..."
+    addKernelArg net.ifnames=0
+    echo "Use classic network interface names ... [DONE]"
 }
 
 installOverclockControl() {
@@ -285,41 +293,25 @@ installChromiumFlags() {
     echo "Install Chromium software-GL environment ... [DONE]"
 }
 
-installFirstBootConfig() {
-    echo "Installing SmartPi first-boot configuration system ..."
-
-    # Install the config template to /boot
-    local configSrc="/tmp/overlay/smartpi-config.txt"
-    local configDest="/boot/smartpi-config.txt"
-    if [[ -f "${configSrc}" ]]; then
-        cp -v "${configSrc}" "${configDest}"
-        # Set default hostname in config based on board name
-        sed -i "s/^HOSTNAME=.*/HOSTNAME=${BOARD}/" "${configDest}"
-        chmod 644 "${configDest}"
-        echo "Config template installed to ${configDest} with HOSTNAME=${BOARD}"
-    fi
-
-    # Install the first-boot script
-    local scriptSrc="/tmp/overlay/smartpi-firstboot.sh"
-    local scriptDest="/usr/local/bin/smartpi-firstboot.sh"
-    if [[ -f "${scriptSrc}" ]]; then
-        cp -v "${scriptSrc}" "${scriptDest}"
-        chmod 755 "${scriptDest}"
-        echo "First-boot script installed to ${scriptDest}"
-    fi
-
-    # Install the systemd service
-    local serviceSrc="/tmp/overlay/smartpi-firstboot.service"
-    local serviceDest="/etc/systemd/system/smartpi-firstboot.service"
-    if [[ -f "${serviceSrc}" ]]; then
-        cp -v "${serviceSrc}" "${serviceDest}"
-        chmod 644 "${serviceDest}"
-        # Enable the service
-        systemctl enable smartpi-firstboot.service
-        echo "First-boot service installed and enabled"
-    fi
-
-    echo "SmartPi first-boot configuration system ... [DONE]"
+installCloudInitDefaults() {
+    # Armbian's cloud-init extension (ENABLE_EXTENSIONS in config-default.conf)
+    # ships a /boot/user-data that only sets a hostname, and disables the
+    # interactive first-login wizard: flashed as-is, the image would boot
+    # with no user account. Ship one that creates pi / yumi and sets root /
+    # yumi, in plain text so anyone can change them from a computer before
+    # the first boot (it blanks them once applied), and a network-config with
+    # a ready WiFi block, in the exact format Raspberry Pi OS ships and
+    # Raspberry Pi Imager writes. Imager replaces both when the flash is
+    # customized; the default user gives its account the board's groups.
+    # Armbian's user-data.template creates an "armbian" user with an SSH key
+    # and resizes an LVM volume: copied by mistake it locks people out.
+    echo "Install cloud-init first-boot files ..."
+    cp -v /tmp/overlay/cloud-init-user-data /boot/user-data
+    cp -v /tmp/overlay/cloud-init-network-config /boot/network-config
+    cp -v /tmp/overlay/cloud-init-default-user.cfg /etc/cloud/cloud.cfg.d/90-smartpi-default-user.cfg
+    chmod 644 /boot/user-data /boot/network-config
+    rm -fv /boot/user-data.template
+    echo "Install cloud-init first-boot files ... [DONE]"
 }
 
 Main "$@"

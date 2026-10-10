@@ -1,0 +1,34 @@
+#cloud-config
+# First-boot settings of this SmartPi, applied once, on the very first boot.
+# Same file and same format as Raspberry Pi OS: Raspberry Pi Imager writes it
+# for you when you customize the flash. By hand: change the values between the
+# quotes and keep the spaces at the start of the lines. The WiFi network goes
+# in network-config, next to this file.
+# Once applied, the two passwords below are replaced by "(set on first boot)"
+# so they do not stay readable on the card.
+
+# Name of this board on the network.
+hostname: "smartpi1"
+manage_etc_hosts: true
+
+# Your user account: its name, then its password.
+users:
+  - name: "pi"
+    plain_text_passwd: "yumi"
+    lock_passwd: false
+    groups: [sudo, users, adm, dialout, audio, video, plugdev, netdev, i2c, spi, gpio]
+    shell: /bin/bash
+    sudo: ALL=(ALL:ALL) ALL
+
+# The root password.
+chpasswd:
+  expire: false
+  users:
+    - name: root
+      password: "yumi"
+      type: text
+
+ssh_pwauth: true
+
+runcmd:
+  - [sed, -i, -E, 's/^([[:space:]]*(plain_text_passwd|password):).*/\1 "(set on first boot)"/', /boot/user-data]

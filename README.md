@@ -21,6 +21,7 @@ Custom Armbian image builder for SmartPi devices by **[Yumi Lab](https://www.yum
 - **SSH over the USB OTG port** (since v1.8.0) — one cable powers the board and provides network access (NCM gadget: Linux, Windows 11, macOS)
 - **Hardened against power cuts** — file systems are repaired automatically at boot (`fsck.repair=yes`, the Raspberry Pi OS default), a damaged FAT `/boot` cannot block the boot (`nofail`), the ext4 root runs in `data=ordered` with `errors=remount-ro` instead of Armbian's writeback default, a hang or a panic reboots by itself (`panic=10`, hardware watchdog), the journal stays in RAM, and `/boot/yumi-boot.log` records every unclean shutdown and repair, readable from any PC
 - **Kernel headers pre-installed** — compile and load kernel modules directly on the board (WiFi drivers, DKMS modules) without a cross-compilation setup
+- **Flash-time configuration** (since v1.8.0) — hostname, user, WiFi and SSH set from Raspberry Pi Imager's customization screen (cloud-init), or by editing `user-data` / `network-config` on the boot partition from any computer
 - **12 images** built automatically for 6 distros (single `smartpi1` board, also used on SmartPad), flashable through Raspberry Pi Imager with the Yumi repository
 
 ## Table of Contents
@@ -192,19 +193,52 @@ Boards get unplugged rather than shut down, so the images are hardened in place,
 
 ## First-Boot Configuration
 
-> **Note:** The first-boot configuration system (`smartpi-config.txt`) is currently disabled and under development. It will be re-enabled in a future release.
+No screen or keyboard is needed, exactly as with Raspberry Pi OS: same files,
+same format. The boot partition (FAT32, mounted by Windows, macOS and Linux)
+carries `user-data`, `network-config` and `meta-data`, which
+[cloud-init](https://cloudinit.readthedocs.io/) applies once, on the first boot.
 
-At first boot, Armbian will prompt you to create a root password and a first user account. For headless setup, connect via serial console or SSH (root login with no password on first connection) and follow the interactive setup.
+- `user-data`: the hostname, the user name and its password, the root password.
+  Change the values between the quotes. The passwords are in plain text so they
+  can be typed in; once applied they are replaced by `(set on first boot)` so they
+  do not stay readable on the card.
+- `network-config`: Ethernet works as is. For WiFi, delete the `#` at the start of
+  the eight lines of the `wifis` block and fill the network name, its password and
+  your country code. Filled in, the block is byte for byte what Raspberry Pi
+  Imager writes ([netplan v2 format](https://cloudinit.readthedocs.io/en/latest/reference/network-config-format-v2.html);
+  `network-config.template` shows a static address).
+
+Raspberry Pi Imager's customization screen (below) writes both files for you.
+Flashed as-is, an image boots with:
+
+| User | Password | Notes |
+|------|----------|-------|
+| `pi` | `yumi` | sudo + hardware groups (gpio, i2c, spi, dialout…) |
+| `root` | `yumi` | |
+
+Change them after the first login. Armbian's interactive first-login wizard is
+disabled, cloud-init replaces it. Network interfaces keep the classic names
+`eth0` / `wlan0` (`net.ifnames=0`), the ones Raspberry Pi Imager writes in
+`network-config`. On Debian 11 the root password keeps Armbian's default (`1234`,
+to change at the first login): its cloud-init is too old for the root setting.
 
 ## Raspberry Pi Imager
 
-The images can be browsed and flashed with Raspberry Pi Imager through a custom repository (the official catalog only lists operating systems for Raspberry Pi hardware). Start the Imager with:
+The images can be browsed, flashed **and customized** with Raspberry Pi Imager
+through the Yumi repository (the official catalog only lists operating systems
+for Raspberry Pi hardware). Start the Imager with:
 
 ```bash
 rpi-imager --repo https://yumi-lab.github.io/SmartPi-armbian/os_list.json
 ```
 
-On Windows or macOS, create a shortcut to the Raspberry Pi Imager executable with the same `--repo` argument. The catalog is regenerated automatically for every release by the `PublishImagerRepo` workflow.
+On Windows or macOS, create a shortcut to the Raspberry Pi Imager executable with
+the same `--repo` argument; Imager 2 also accepts a custom repository URL in its
+settings. Pick the SmartPi One (or SmartPad) and an image: the customization
+step then sets the hostname, a user and password, an SSH key, the WiFi network
+and the locale, written to the boot partition as cloud-init files and applied on
+the first boot. The catalog declares `init_format: cloudinit` and is regenerated
+automatically for every release by the `PublishImagerRepo` workflow.
 
 ## Getting Started
 

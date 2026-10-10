@@ -1,0 +1,22 @@
+# Network of this SmartPi, applied on the first boot. Same file and same format
+# as Raspberry Pi OS: Raspberry Pi Imager writes it for you when you set a WiFi
+# network in its customization screen. Ethernet works as is.
+# WiFi by hand: delete the "#" at the start of the 8 lines of the wifis block,
+# then put your network name and password between the quotes and your country
+# code (FR, CN, US...) in regulatory-domain. Keep the spaces at the start of
+# the lines.
+network:
+  version: 2
+  ethernets:
+    eth0:
+      dhcp4: true
+      dhcp6: true
+      optional: true
+#  wifis:
+#    wlan0:
+#      dhcp4: true
+#      regulatory-domain: "FR"
+#      access-points:
+#        "MyWifiName":
+#          password: "MyWifiPassword"
+#      optional: true

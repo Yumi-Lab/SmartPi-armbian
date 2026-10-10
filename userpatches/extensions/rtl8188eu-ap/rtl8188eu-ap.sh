@@ -71,6 +71,30 @@ function custom_kernel_config__rtl8188eu_ap() {
 	kernel_config_set_m CONFIG_RTL8188EU
 }
 
+# NetworkManager hands out addresses on a hotspot through dnsmasq: without it,
+# "nmcli device wifi hotspot" brings the access point up, then drops it at once
+# ("could not start dnsmasq"). The server images do not carry it.
+function extension_prepare_config__rtl8188eu_ap_hotspot_dhcp() {
+	add_packages_to_image dnsmasq-base
+}
+
+# The 8188eu driver offers no BIP cipher (WEP, TKIP and CCMP only), so it cannot
+# do protected management frames. Left to its default, NetworkManager's hotspot
+# makes wpa_supplicant install one and the kernel refuses it ("key setting
+# validation failed"): the access point never starts. Turn PMF off for this
+# driver only; every other dongle keeps NetworkManager's default.
+function post_family_tweaks__rtl8188eu_ap_no_pmf() {
+	display_alert "rtl8188eu" "no protected management frames for ${RTL8188EU_MODULE} in NetworkManager" "info"
+	mkdir -p "${SDCARD}/etc/NetworkManager/conf.d"
+	cat <<- NMCONF > "${SDCARD}/etc/NetworkManager/conf.d/90-${RTL8188EU_MODULE}-no-pmf.conf"
+		# ${RTL8188EU_MODULE} offers no BIP cipher: protected management frames cannot work,
+		# and a hotspot asking for them never starts. Written by the rtl8188eu-ap extension.
+		[connection-${RTL8188EU_MODULE}-no-pmf]
+		match-device=driver:${RTL8188EU_MODULE}
+		wifi-sec.pmf=1
+	NMCONF
+}
+
 # Both drivers match the RTL8188E USB IDs and the first one registered binds.
 # softdep loads 8188eu ahead of rtl8xxxu, so 8188eu claims the IDs in its own
 # table (the RTL8188E family only) and every other Realtek dongle stays with
