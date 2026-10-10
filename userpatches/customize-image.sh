@@ -300,13 +300,15 @@ installCloudInitDefaults() {
     # with no user account. Ship one that creates pi / yumi and sets root /
     # yumi, in plain text so anyone can change them from a computer before
     # the first boot (it blanks them once applied), and a network-config with
-    # a ready WiFi block, the way Raspberry Pi OS ships them. Raspberry Pi
-    # Imager replaces both files when the flash is customized. Armbian's
-    # user-data.template creates an "armbian" user with an SSH key and
-    # resizes an LVM volume: copied by mistake it locks people out, so it goes.
+    # a ready WiFi block, in the exact format Raspberry Pi OS ships and
+    # Raspberry Pi Imager writes. Imager replaces both when the flash is
+    # customized; the default user gives its account the board's groups.
+    # Armbian's user-data.template creates an "armbian" user with an SSH key
+    # and resizes an LVM volume: copied by mistake it locks people out.
     echo "Install cloud-init first-boot files ..."
     cp -v /tmp/overlay/cloud-init-user-data /boot/user-data
     cp -v /tmp/overlay/cloud-init-network-config /boot/network-config
+    cp -v /tmp/overlay/cloud-init-default-user.cfg /etc/cloud/cloud.cfg.d/90-smartpi-default-user.cfg
     chmod 644 /boot/user-data /boot/network-config
     rm -fv /boot/user-data.template
     echo "Install cloud-init first-boot files ... [DONE]"

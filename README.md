@@ -193,19 +193,19 @@ Boards get unplugged rather than shut down, so the images are hardened in place,
 
 ## First-Boot Configuration
 
-No screen or keyboard is needed. The first boot is configured by two text files
-on the boot partition, which any computer can edit before the card goes into the
-board (the partition is tagged FAT32, so Windows and macOS mount it like a
-Raspberry Pi OS card). [cloud-init](https://cloudinit.readthedocs.io/) applies
-them once, on the first boot, the way Raspberry Pi OS does.
+No screen or keyboard is needed, exactly as with Raspberry Pi OS: same files,
+same format. The boot partition (FAT32, mounted by Windows, macOS and Linux)
+carries `user-data`, `network-config` and `meta-data`, which
+[cloud-init](https://cloudinit.readthedocs.io/) applies once, on the first boot.
 
 - `user-data`: the hostname, the user name and its password, the root password.
   Change the values between the quotes. The passwords are in plain text so they
   can be typed in; once applied they are replaced by `(set on first boot)` so they
   do not stay readable on the card.
 - `network-config`: Ethernet works as is. For WiFi, delete the `#` at the start of
-  the seven lines of the WiFi block and put the network name and password between
-  the quotes ([netplan v2 format](https://cloudinit.readthedocs.io/en/latest/reference/network-config-format-v2.html);
+  the eight lines of the `wifis` block and fill the network name, its password and
+  your country code. Filled in, the block is byte for byte what Raspberry Pi
+  Imager writes ([netplan v2 format](https://cloudinit.readthedocs.io/en/latest/reference/network-config-format-v2.html);
   `network-config.template` shows a static address).
 
 Raspberry Pi Imager's customization screen (below) writes both files for you.
