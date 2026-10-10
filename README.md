@@ -193,16 +193,23 @@ Boards get unplugged rather than shut down, so the images are hardened in place,
 
 ## First-Boot Configuration
 
-The images ship with [cloud-init](https://cloudinit.readthedocs.io/) (Armbian's
-native `cloud-init` extension, NoCloud datasource): the first boot is configured
-by plain-text files on the FAT boot partition, which any computer can edit before
-the card goes into the board (it is tagged FAT32, so Windows and macOS mount it
-like a Raspberry Pi OS card) — `user-data` (hostname, users, SSH),
-`network-config` (Ethernet/WiFi, [netplan v2 format](https://cloudinit.readthedocs.io/en/latest/reference/network-config-format-v2.html))
-and `meta-data`. The `*.template` files next to them show the syntax.
+No screen or keyboard is needed. The first boot is configured by two text files
+on the boot partition, which any computer can edit before the card goes into the
+board (the partition is tagged FAT32, so Windows and macOS mount it like a
+Raspberry Pi OS card). [cloud-init](https://cloudinit.readthedocs.io/) applies
+them once, on the first boot, the way Raspberry Pi OS does.
 
-The easiest way to fill them is the customization screen of Raspberry Pi Imager
-(below). Flashed as-is, an image boots with:
+- `user-data`: the hostname, the user name and its password, the root password.
+  Change the values between the quotes. The passwords are in plain text so they
+  can be typed in; once applied they are replaced by `(set on first boot)` so they
+  do not stay readable on the card.
+- `network-config`: Ethernet works as is. For WiFi, delete the `#` at the start of
+  the seven lines of the WiFi block and put the network name and password between
+  the quotes ([netplan v2 format](https://cloudinit.readthedocs.io/en/latest/reference/network-config-format-v2.html);
+  `network-config.template` shows a static address).
+
+Raspberry Pi Imager's customization screen (below) writes both files for you.
+Flashed as-is, an image boots with:
 
 | User | Password | Notes |
 |------|----------|-------|
@@ -210,9 +217,10 @@ The easiest way to fill them is the customization screen of Raspberry Pi Imager
 | `root` | `yumi` | |
 
 Change them after the first login. Armbian's interactive first-login wizard is
-disabled — cloud-init replaces it. Network interfaces keep the classic names
+disabled, cloud-init replaces it. Network interfaces keep the classic names
 `eth0` / `wlan0` (`net.ifnames=0`), the ones Raspberry Pi Imager writes in
-`network-config`.
+`network-config`. On Debian 11 the root password keeps Armbian's default (`1234`,
+to change at the first login): its cloud-init is too old for the root setting.
 
 ## Raspberry Pi Imager
 
