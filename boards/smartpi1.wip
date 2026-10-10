@@ -53,3 +53,18 @@ function post_umount_final_image__smartpi1_ext4_ordered() {
 	run_host_command_logged tune2fs -o ^journal_data_writeback -e remount-ro "${LOOP}p2"
 	run_host_command_logged dumpe2fs -h "${LOOP}p2" "|" grep -E "'Default mount options|Errors behavior'"
 }
+
+# Armbian tags the boot partition as MBR type 0xEA (Linux extended boot,
+# partitioning.sh) even when it is FAT, and Windows and macOS refuse to mount
+# a partition of that type: from a computer the card shows no boot partition
+# at all, so the cloud-init files (WiFi, user), armbianEnv.txt and
+# yumi-boot.log cannot be read or edited, and Raspberry Pi Imager cannot write
+# its customization. Retag it as FAT32 LBA (0x0C), the type of every Raspberry
+# Pi OS image. U-Boot loads from the partition number, not the type: the DietPi
+# images built from this one have carried 0x0C since July and boot.
+function post_umount_final_image__smartpi1_boot_fat_type() {
+	[[ "${BOOTFS_TYPE}" == "fat" ]] || return 0
+	display_alert "boot partition for ${BOARD}" "MBR type 0x0C (FAT32 LBA), visible on Windows and macOS" "info"
+	run_host_command_logged sfdisk --no-reread --no-tell-kernel --part-type "${LOOP}" 1 c
+	run_host_command_logged sfdisk --part-type "${LOOP}" 1
+}
