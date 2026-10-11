@@ -7,6 +7,10 @@ on:
         description: "Numéro de version (ex: v1.5.0)"
         required: true
         type: string
+      run_id:
+        description: "Build Images à publier (vide = dernier réussi sur develop). Ex : la matrice verte d'une PR que develop vient de merger, même contenu sans recompiler."
+        required: false
+        type: string
 
 jobs:
   create-release:
@@ -23,9 +27,26 @@ jobs:
       - name: Récupérer l'ID du dernier Build Images réussi
         id: get_build
         run: |
-          RUN_ID=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/runs?status=success&branch=develop&per_page=50" | \
-            jq -r '[.workflow_runs[] | select(.name == "Build Images")][0].id')
+          RUN_ID="${{ github.event.inputs.run_id }}"
+          if [ -n "$RUN_ID" ]; then
+            RUN=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/runs/$RUN_ID")
+            if [ "$(jq -r .name <<<"$RUN")" != "Build Images" ] || [ "$(jq -r .conclusion <<<"$RUN")" != "success" ]; then
+              echo "::error::Run $RUN_ID is not a green Build Images run"; exit 1
+            fi
+            # Publish only images built from exactly what gets tagged: same build inputs as HEAD,
+            # only this workflow and the docs may differ. Otherwise build develop and release that.
+            SHA=$(jq -r .head_sha <<<"$RUN")
+            if ! git diff --quiet "$SHA" HEAD -- . ':(exclude).github/workflows/Release.yml' ':(exclude)*.md' ':(exclude)docs'; then
+              echo "::error::Run $RUN_ID was built from $SHA, whose build inputs differ from HEAD"
+              git diff --stat "$SHA" HEAD -- . ':(exclude).github/workflows/Release.yml' ':(exclude)*.md' ':(exclude)docs'
+              exit 1
+            fi
+          else
+            RUN_ID=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/runs?status=success&branch=develop&per_page=50" | \
+              jq -r '[.workflow_runs[] | select(.name == "Build Images")][0].id')
+          fi
           echo "Dernier Build Images réussi: $RUN_ID"
           echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
 
