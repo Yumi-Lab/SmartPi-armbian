@@ -34,6 +34,7 @@ jobs:
     outputs:
       configfiles: ${{ steps.set-matrix.outputs.configfiles }}
       time: ${{ steps.time.outputs.time }}
+      armbian_ref: ${{ steps.armbian.outputs.ref }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -47,6 +48,17 @@ jobs:
           echo "${JSON}"
           echo "::endgroup::"
 
+      # Armbian main moves while a run is in progress: pin one commit for every job, so the
+      # kernel built once below has the same hash in all the image jobs.
+      - name: Pin the Armbian commit for the whole run
+        id: armbian
+        run: |
+          source ./configs/config-default.conf
+          ref=$(git ls-remote "https://github.com/${ARMBIAN_REPOSITORY}" "refs/heads/${ARMBIAN_BRANCH}" | cut -f1)
+          [[ -n "$ref" ]] || { echo "::error::could not resolve ${ARMBIAN_REPOSITORY} ${ARMBIAN_BRANCH}"; exit 1; }
+          echo "ref=${ref}" >> $GITHUB_OUTPUT
+          echo "Armbian ${ARMBIAN_BRANCH} pinned at ${ref}"
+
       - name: Get Time
         id: time
         uses: nanzm/get-time-action@v2.0
@@ -54,10 +66,76 @@ jobs:
           timeZone: UTC
           format: "YYYY-MM-DD-HHmm"
 
+  # The kernel is the same for every image of a kernel branch, and it took 54 of the 86
+  # minutes of an image job, recompiled in all 12 of them. Build it once per branch here;
+  # when nothing that goes into it changed since the last run, Armbian finds it in the
+  # restored cache (same hash) and skips the compile. The image jobs reuse it the same way:
+  # Armbian only takes a cached kernel whose hash matches, otherwise it compiles its own.
+  kernel:
+    name: Kernel ${{ matrix.branch }}
+    runs-on: ubuntu-latest
+    needs: [setup]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - branch: current
+            configfile: smartpi1-trixie-server
+          - branch: legacy
+            configfile: smartpi1-bullseye-server
+    steps:
+      - name: Mark the start of the job
+        run: touch "$RUNNER_TEMP/job-start"
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          path: build-configs
+
+      - name: Restore the last kernel build
+        uses: actions/cache/restore@v4
+        with:
+          path: prebuilt
+          key: armbian-kernel-${{ matrix.branch }}-${{ github.run_id }}
+          restore-keys: armbian-kernel-${{ matrix.branch }}-
+
+      - name: Build the kernel, or find it unchanged
+        uses: ./build-configs/actions/build-image
+        with:
+          configfile: ${{ matrix.configfile }}
+          armbian_ref: ${{ needs.setup.outputs.armbian_ref }}
+          prebuilt_dir: prebuilt
+          compile_args: kernel KEEP_HASHED_DEB_ARTIFACTS=yes
+
+      # Keep only this run's kernel: Armbian touches the cached packages it reuses and
+      # writes the ones it builds, older ones from the restored cache are dropped.
+      - name: Keep this run's kernel packages
+        run: |
+          rm -rf prebuilt && mkdir prebuilt
+          cd build/output/packages-hashed
+          find . -type f -newer "$RUNNER_TEMP/job-start" -exec cp --parents -a {} ../../../prebuilt/ \;
+          cd - > /dev/null
+          find prebuilt -type f | sort
+          [[ -n "$(find prebuilt -name 'linux-image-*.deb')" ]] || { echo "::error::no kernel package was built or reused"; exit 1; }
+
+      - name: Save it for the next runs
+        uses: actions/cache/save@v4
+        with:
+          path: prebuilt
+          key: armbian-kernel-${{ matrix.branch }}-${{ github.run_id }}
+
+      - name: Hand it to the image jobs
+        uses: actions/upload-artifact@v4
+        with:
+          name: prebuilt-kernel-${{ matrix.branch }}
+          path: prebuilt
+          if-no-files-found: error
+          retention-days: 1
+
   build:
     name: Build ${{ matrix.configfile }}
     runs-on: ubuntu-latest
-    needs: [setup]
+    needs: [setup, kernel]
     strategy:
       fail-fast: false
       matrix:
@@ -69,10 +147,19 @@ jobs:
           path: build-configs
           fetch-depth: 0
 
+      - name: Get the kernels built for this run
+        uses: actions/download-artifact@v4
+        with:
+          pattern: prebuilt-kernel-*
+          merge-multiple: true
+          path: prebuilt
+
       - name: Build
         uses: ./build-configs/actions/build-image
         with:
           configfile: ${{ matrix.configfile }}
+          armbian_ref: ${{ needs.setup.outputs.armbian_ref }}
+          prebuilt_dir: prebuilt
 
       - name: Generate Name Prefix
         id: image_name

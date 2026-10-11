@@ -5,6 +5,18 @@ inputs:
   configfile:
     description: "Config file name"
     required: true
+  armbian_ref:
+    description: "Armbian commit to build from (default: the configured branch, pulled). Pinned so every job of a run computes the same artifact hashes."
+    required: false
+    default: ""
+  prebuilt_dir:
+    description: "Directory of Armbian artifacts built earlier in the run (output/packages-hashed); Armbian reuses those whose hash still matches."
+    required: false
+    default: ""
+  compile_args:
+    description: "Extra compile.sh arguments, e.g. a command such as 'kernel'"
+    required: false
+    default: ""
 
 runs:
   using: "composite"
@@ -47,10 +59,11 @@ runs:
         #fetch-depth: 1
         fetch-depth: 0
         repository: ${{ steps.config.outputs.armbian_repository }}
-        ref: ${{ steps.config.outputs.armbian_branch }}
+        ref: ${{ inputs.armbian_ref || steps.config.outputs.armbian_branch }}
         path: build
 
     - name: Update Armbian Repository
+      if: inputs.armbian_ref == ''
       shell: bash
       run: |
         cd build
@@ -100,6 +113,14 @@ runs:
         cat ./build/VERSION
         echo "::endgroup::"
 
+    - name: Reuse artifacts built earlier in the run
+      if: inputs.prebuilt_dir != ''
+      shell: bash
+      run: |
+        mkdir -p ./build/output/packages-hashed
+        [[ -d "${{ inputs.prebuilt_dir }}" ]] && cp -a "${{ inputs.prebuilt_dir }}/." ./build/output/packages-hashed/
+        find ./build/output/packages-hashed -type f -name "*.deb" | sort
+
     - name: Build Image
       shell: bash
       env:
@@ -110,7 +131,7 @@ runs:
         COLUMNS: "120"
       run: |
         cd ./build
-        ./compile.sh settings
+        ./compile.sh settings ${{ inputs.compile_args }}
 
     - name: Fix userrights
       shell: bash

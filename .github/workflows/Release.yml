@@ -84,7 +84,7 @@ jobs:
 
           curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             "https://api.github.com/repos/${{ github.repository }}/actions/runs/$RUN_ID/artifacts?per_page=100" | \
-            jq -r '.artifacts[] | select(.name | test("\\.txt$") | not) | .archive_download_url + "|" + .name' | \
+            jq -r '.artifacts[] | select(.name | test("\\.txt$|^prebuilt-") | not) | .archive_download_url + "|" + .name' | \
           while IFS='|' read url name; do
             echo "→ $name"
             curl -sL -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "$url" -o artifact.zip
