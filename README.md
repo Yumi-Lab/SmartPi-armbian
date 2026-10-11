@@ -300,6 +300,7 @@ SmartPi-armbian/
 ├── userpatches/
 │   ├── customize-image.sh      # Image customization script
 │   ├── extensions/rtl8188eu-ap/  # 8188eu driver in the kernel (RTL8188EUS access point mode)
+│   ├── extensions/aic8800-usb/   # AIC8800 USB WiFi 6 + Bluetooth dongles, plug and play
 │   ├── kernel/archive/sunxi-6.18/
 │   │   └── 0001-...-overclock-opp.patch  # H3 1368 MHz OC patch
 │   └── overlay/                # Files copied to image

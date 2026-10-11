@@ -1,0 +1,116 @@
+From 701c4566b0b245fd877e4c8bf7c09f5c268f1a96 Mon Sep 17 00:00:00 2001
+From: Yumi-Lab <nicolas@yumi-lab.com>
+Date: Sun, 11 Oct 2026 18:19:44 +0800
+Subject: [PATCH] cfg80211: set_monitor_channel takes a net_device from
+ 6.12.101 on
+
+The 6.13 change "wifi: cfg80211: pass net_device to .set_monitor_channel"
+was backported to 6.12.101 (stable commit 4dae80dd259b), so 6.12.101 and
+later fail to build with the 6.13 guards: rwnx_main.c, error:
+initialization of 'int (*)(struct wiphy *, struct net_device *, struct
+cfg80211_chan_def *)' from incompatible pointer type. The two
+MODULE_IMPORT_NS guards are another 6.13 change and stay as they are.
+---
+ aic8800_fdrv/aic_priv_cmd.c | 8 ++++----
+ aic8800_fdrv/aic_priv_cmd.h | 2 +-
+ aic8800_fdrv/rwnx_main.c    | 6 +++---
+ aic8800_fdrv/rwnx_main.h    | 2 +-
+ 4 files changed, 9 insertions(+), 9 deletions(-)
+
+diff --git a/aic8800_fdrv/aic_priv_cmd.c b/aic8800_fdrv/aic_priv_cmd.c
+index 14f5904..4b00cc3 100644
+--- a/aic8800_fdrv/aic_priv_cmd.c
++++ b/aic8800_fdrv/aic_priv_cmd.c
+@@ -1832,7 +1832,7 @@ void set_vendor_extension_ie(char *command){
+ 
+ }
+ #endif//CONFIG_SET_VENDOR_EXTENSION_IE
+-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 13, 0))
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 101))
+ int rwnx_cfg80211_set_monitor_channel_(struct wiphy *wiphy, struct net_device *dev,
+                                              struct cfg80211_chan_def *chandef);
+ #else
+@@ -1840,7 +1840,7 @@ int rwnx_cfg80211_set_monitor_channel_(struct wiphy *wiphy,
+                                              struct cfg80211_chan_def *chandef);
+ #endif
+ int rwnx_atoi2(char *value, int c_len);
+-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 13, 0))
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 101))
+ void set_mon_chan(struct rwnx_vif *vif, struct net_device *dev, char *parameter)
+ #else
+ void set_mon_chan(struct rwnx_vif *vif, char *parameter)
+@@ -1867,7 +1867,7 @@ void set_mon_chan(struct rwnx_vif *vif, char *parameter)
+     chandef->center_freq1 = chandef->chan->center_freq;
+     chandef->center_freq2 = 0;
+ 
+-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 13, 0))
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 101))
+     rwnx_cfg80211_set_monitor_channel_(vif->rwnx_hw->wiphy, dev, chandef);
+ #else
+     rwnx_cfg80211_set_monitor_channel_(vif->rwnx_hw->wiphy, chandef);
+@@ -2136,7 +2136,7 @@ int android_priv_cmd(struct net_device *net, struct ifreq *ifr, int cmd)
+ 	    char *set_parameter;
+         skip = strlen(CMD_SET_MON_FREQ) + 1;
+ 		set_parameter = command + skip;
+-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 13, 0))
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 101))
+ 	    set_mon_chan(vif, net, set_parameter);
+ #else
+ 	    set_mon_chan(vif, set_parameter);
+diff --git a/aic8800_fdrv/aic_priv_cmd.h b/aic8800_fdrv/aic_priv_cmd.h
+index a51ae48..b59aba0 100644
+--- a/aic8800_fdrv/aic_priv_cmd.h
++++ b/aic8800_fdrv/aic_priv_cmd.h
+@@ -62,7 +62,7 @@ int get_cs_info(struct rwnx_vif *vif, u8 *mac_addr, u8 *val);
+ unsigned int command_strtoul(const char *cp, char **endp, unsigned int base);
+ int str_starts(const char *str, const char *start);
+ int handle_private_cmd(struct net_device *net, char *command, u32 cmd_len);
+-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 13, 0))
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 101))
+ void set_mon_chan(struct rwnx_vif *vif, struct net_device *dev, char *parameter);
+ #else
+ void set_mon_chan(struct rwnx_vif *vif, char *parameter);
+diff --git a/aic8800_fdrv/rwnx_main.c b/aic8800_fdrv/rwnx_main.c
+index e1ebf47..b988083 100644
+--- a/aic8800_fdrv/rwnx_main.c
++++ b/aic8800_fdrv/rwnx_main.c
+@@ -4433,7 +4433,7 @@ cfg80211_chandef_identical(const struct cfg80211_chan_def *chandef1,
+ }
+ #endif
+ 
+-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 13, 0))
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 101))
+ static int rwnx_cfg80211_set_monitor_channel(struct wiphy *wiphy, struct net_device *dev,
+                                              struct cfg80211_chan_def *chandef)
+ #else
+@@ -4493,7 +4493,7 @@ static int rwnx_cfg80211_set_monitor_channel(struct wiphy *wiphy,
+ }
+ 
+ 
+-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 13, 0))
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 101))
+ int rwnx_cfg80211_set_monitor_channel_(struct wiphy *wiphy,
+                                              struct net_device *dev,
+                                              struct cfg80211_chan_def *chandef)
+@@ -5055,7 +5055,7 @@ static int rwnx_cfg80211_get_channel(struct wiphy *wiphy,
+     if (rwnx_vif->vif_index == rwnx_hw->monitor_vif)
+     {
+         //retrieve channel from firmware
+-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 13, 0))
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 101))
+         rwnx_cfg80211_set_monitor_channel(wiphy, wdev->netdev, NULL);
+ #else
+         rwnx_cfg80211_set_monitor_channel(wiphy, NULL);
+diff --git a/aic8800_fdrv/rwnx_main.h b/aic8800_fdrv/rwnx_main.h
+index 12b81f1..6ac0d96 100644
+--- a/aic8800_fdrv/rwnx_main.h
++++ b/aic8800_fdrv/rwnx_main.h
+@@ -91,7 +91,7 @@ void aicwf_p2p_alive_timeout(struct timer_list *t);
+ int rwnx_send_check_p2p(struct cfg80211_scan_request *param);
+ void apm_staloss_work_process(struct work_struct *work);
+ void apm_probe_sta_work_process(struct work_struct *work);
+-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 13, 0))
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 101))
+ int rwnx_cfg80211_set_monitor_channel_(struct wiphy *wiphy,
+                                              struct net_device *dev,
+                                              struct cfg80211_chan_def *chandef);

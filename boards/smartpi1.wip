@@ -9,6 +9,8 @@ KERNEL_TARGET="legacy,current,edge"
 
 # 8188eu driver so RTL8188EUS dongles can run as an access point (userpatches/extensions/).
 enable_extension "rtl8188eu-ap"
+# AIC8800 USB WiFi 6 + Bluetooth dongles work as soon as they are plugged in (userpatches/extensions/).
+enable_extension "aic8800-usb"
 
 # Replace U-Boot's built-in logo with the Yumi one. It is drawn the instant the
 # video device is probed — before any file is read from the SD card — so it
