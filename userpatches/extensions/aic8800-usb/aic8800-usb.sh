@@ -33,8 +33,13 @@ function aic8800_usb_extract() {
 }
 
 function custom_kernel_config__aic8800_usb() {
-	# Rebuild the kernel when the driver version changes.
+	# Fixes for our kernels, written against the driver's aic8800 directory (see each patch's message).
+	declare -a patches=()
+	mapfile -t patches < <(find "${EXTENSION_DIR}" -maxdepth 1 -name '*.patch' | sort)
+
+	# Rebuild the kernel when the driver version or the patches change.
 	kernel_config_modifying_hashes+=("aic8800_usb=${AIC8800_VERSION}")
+	kernel_config_modifying_hashes+=("aic8800_usb_patches=$(cat /dev/null "${patches[@]}" | sha256sum | cut -d' ' -f1)")
 
 	# Also called during version calculation, with no kernel tree.
 	[[ ! -f .config ]] && return 0
@@ -47,6 +52,13 @@ function custom_kernel_config__aic8800_usb() {
 	display_alert "aic8800" "adding aic_load_fw and aic8800_fdrv to the kernel tree" "info"
 	run_host_command_logged rm -rf "${driver_dir}"
 	run_host_command_logged cp -a "${src_dir}"/usr/src/aic8800-usb-*/USB/driver_fw/drivers/aic8800 "${driver_dir}"
+
+	declare patch_file
+	for patch_file in "${patches[@]}"; do
+		display_alert "aic8800" "applying $(basename "${patch_file}")" "info"
+		run_host_command_logged patch --batch -p1 -d "${driver_dir}" "<" "${patch_file}" ||
+			exit_with_error "aic8800 patch did not apply" "$(basename "${patch_file}")"
+	done
 
 	# The vendor Makefile already builds both modules as m; one Kconfig symbol gates the directory.
 	cat <<- KCONFIG > "${driver_dir}/Kconfig"
