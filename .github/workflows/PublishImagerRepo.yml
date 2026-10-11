@@ -76,7 +76,7 @@ jobs:
               echo "No ${VERSION} release in ${REPO}, skipping"; return 0; }
 
             gh release view "$VERSION" --repo "$REPO" --json assets \
-              --jq '.assets[] | select(.name | endswith(".img.xz")) | .name + "|" + (.size | tostring)' \
+              --jq '.assets[] | select((.name | endswith(".img.xz")) and (.name | contains("-bootloader-") | not)) | .name + "|" + (.size | tostring)' \
             | sort | while IFS='|' read -r NAME XZSIZE; do
               local URL="https://github.com/${REPO}/releases/download/${VERSION}/${NAME}"
               echo "== ${NAME}"

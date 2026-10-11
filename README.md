@@ -31,6 +31,7 @@ Custom Armbian image builder for SmartPi devices by **[Yumi Lab](https://www.yum
 - [Supported Distributions](#supported-distributions)
 - [H3 CPU Overclock](#h3-cpu-overclock)
 - [Image Naming Convention](#image-naming-convention)
+- [Boot From a USB Stick or SSD](#boot-from-a-usb-stick-or-ssd)
 - [First-Boot Configuration](#first-boot-configuration)
 - [Raspberry Pi Imager](#raspberry-pi-imager)
 - [Getting Started](#getting-started)
@@ -190,6 +191,16 @@ Boards get unplugged rather than shut down, so the images are hardened in place,
 - The systemd journal stays in RAM (`Storage=volatile`); Armbian would otherwise write it to the card continuously.
 
 `yumi-bootlog` writes one line per boot to `/var/lib/yumi/boot.log` and, only after a power cut or a repair, to `/boot/yumi-boot.log` on the FAT partition. From any PC, `grep -c UNCLEAN yumi-boot.log` on that partition tells how many times the board was cut, and `root_fsck=repaired` lines show what fsck had to fix. Before reflashing a card that no longer boots, run `fsck.ext4 -n` on its second partition from a Linux PC: repairable errors mean the software path applies; a card that reads back zeros or turns read-only is a card or power supply problem.
+
+## Boot From a USB Stick or SSD
+
+The H3 boot ROM only starts from the SD card, so U-Boot always comes from it, but it then looks for the operating system on USB storage first, then on the card, then on the network (PXE, DHCP). Flash any SmartPi image on a USB stick or an SSD in a USB enclosure and plug it in: the board boots it, and the card's own system is left untouched. Unplug it and the card boots again. That gives:
+
+- a system on an SSD, which takes writes and power cuts far better than a microSD, with the card only used to boot;
+- a rescue path when the card's system no longer boots while U-Boot, in an area nothing writes to, still does;
+- a way to try another system without reflashing the card.
+
+For a system kept entirely on USB, flash `Yumi-smartpi1-bootloader-<date>.img.xz` from the release on any SD card: it only holds U-Boot (a few hundred KB) and a small `SMARTPIBOOT` volume with a README. Do not reformat that card, reflash it. Do not put the very same image file on the card and on the USB drive: both copies would carry the same partition IDs and the kernel could mount the card's. Power an SSD properly (5 V, 2 to 3 A, or a powered enclosure): drawn from a computer's USB port through OTG, the board resets.
 
 ## First-Boot Configuration
 

@@ -238,3 +238,49 @@ jobs:
             ${{ github.workspace }}/build/output/debs/**/linux-headers-*.deb
             ${{ github.workspace }}/build/output/debs/**/linux-dtb-*.deb
             ${{ github.workspace }}/build/output/debs/**/linux-u-boot-*.deb
+
+      # A card holding only U-Boot, for a system kept entirely on a USB stick or SSD: U-Boot
+      # tries USB storage first, then the card, then the network. A small FAT volume from
+      # 1 MiB makes computers mount the card instead of offering to format it, which could
+      # wipe U-Boot (it sits at 8 KiB, before the partition), and carries a README.
+      - name: Make the bootloader-only SD image
+        id: bootloader
+        if: matrix.configfile == 'smartpi1-trixie-server'
+        run: |
+          set -euo pipefail
+          sudo apt-get install -y -qq dosfstools mtools > /dev/null
+          source ./build-configs/configs/config-default.conf
+          name="${VENDOR}-smartpi1-bootloader-${{ needs.setup.outputs.time }}"
+          deb=$(find build/output/debs -name 'linux-u-boot-smartpi1-current_*.deb' | head -n 1)
+          [[ -n "$deb" ]] || { echo "::error::no current U-Boot package"; exit 1; }
+          rm -rf "$RUNNER_TEMP/uboot" && dpkg-deb -x "$deb" "$RUNNER_TEMP/uboot"
+          bin=$(find "$RUNNER_TEMP/uboot" -name u-boot-sunxi-with-spl.bin | head -n 1)
+          (( $(stat -c %s "$bin") + 8192 <= 1048576 )) || { echo "::error::U-Boot does not fit before 1 MiB"; exit 1; }
+          cd build/output/images
+          truncate -s 4M "${name}.img"
+          echo 'start=2048, type=c' | sfdisk -q "${name}.img"
+          mkfs.vfat -n SMARTPIBOOT --offset 2048 "${name}.img" 3072 > /dev/null
+          printf '%s\r\n' \
+            "SmartPi boot loader ($(dpkg-deb -f "$OLDPWD/$deb" Version))" \
+            "" \
+            "This card only holds the SmartPi boot loader (U-Boot), stored before this partition." \
+            "Leave it in the SmartPi and put the system on a USB stick or an SSD, flashed with any" \
+            "SmartPi image: at power-on the boot loader starts the system it finds on USB first," \
+            "then on this card, then on the network." \
+            "" \
+            "Do not reformat this card, that may erase the boot loader: reflash it instead." > README.txt
+          mcopy -i "${name}.img@@1M" README.txt ::README.txt
+          dd if="$bin" of="${name}.img" bs=1024 seek=8 conv=notrunc status=none
+          xz -9 -T0 "${name}.img"
+          sha256sum "${name}.img.xz" > "${name}.img.xz.sha256"
+          echo "name=${name}" >> $GITHUB_OUTPUT
+          ls -l "${name}.img.xz"
+
+      - name: Upload the bootloader-only SD image
+        if: steps.bootloader.outcome == 'success'
+        uses: actions/upload-artifact@v4.3.0
+        with:
+          name: ${{ steps.bootloader.outputs.name }}.img.xz
+          path: |
+            ${{ github.workspace }}/build/output/images/${{ steps.bootloader.outputs.name }}.img.xz
+            ${{ github.workspace }}/build/output/images/${{ steps.bootloader.outputs.name }}.img.xz.sha256
