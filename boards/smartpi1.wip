@@ -31,11 +31,16 @@ function pre_config_uboot_target__smartpi1_yumi_logo() {
 # already loaded from that very partition. FAT has no journal and /boot is
 # written at run time (kernel and initramfs updates, armbian-firstrun,
 # smartpi-oc), so a power cut can leave it dirty.
+# nofail alone also drops the mount's ordering before local-fs.target
+# (systemd.mount): services that read /boot could then start before it is
+# mounted (seen on hardware: local-fs.target at 7.3 s, /boot at 9.5 s).
+# x-systemd.before=local-fs.target keeps the order without making the boot
+# depend on the mount succeeding.
 # Done on the final image: /etc/fstab does not exist yet when
 # customize-image.sh runs (prepare_partitions comes after customize_image).
 function pre_umount_final_image__smartpi1_boot_nofail() {
-	display_alert "fstab for ${BOARD}" "mount /boot with nofail" "info"
-	sed -i '/[[:space:]]\/boot[[:space:]]/ s/defaults/defaults,nofail/' "${MOUNT}/etc/fstab"
+	display_alert "fstab for ${BOARD}" "mount /boot with nofail, still before local-fs.target" "info"
+	sed -i '/[[:space:]]\/boot[[:space:]]/ s/defaults/defaults,nofail,x-systemd.before=local-fs.target/' "${MOUNT}/etc/fstab"
 	run_host_command_logged grep /boot "${MOUNT}/etc/fstab"
 }
 
