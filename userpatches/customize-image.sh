@@ -167,10 +167,13 @@ hardenAgainstPowerCuts() {
     #   persistent, and armbian-ramlog moves that journal to /var/log.hdd on the
     #   card, written continuously. The current boot's log stays in /run.
     # - hardware watchdog: sunxi_wdt is built in (16 s maximum); PID 1 pings it
-    #   every 8 s, so a hung system resets itself. It is armed once the boot is
-    #   over, not by system.conf: PID 1 does not ping while it runs generators
-    #   and loads units, 13 s measured from a USB stick behind a USB 1.1 hub,
-    #   and beyond 16 s the watchdog reset every boot in a loop.
+    #   every 8 s, so a hung system resets itself. It is armed as the first
+    #   services start (basic.target, the earliest point where busctl reaches
+    #   PID 1 over D-Bus), not by system.conf: PID 1 does not ping while it
+    #   runs generators and loads units, 13 s measured from a USB stick behind
+    #   a USB 1.1 hub, and beyond 16 s the watchdog reset every boot in a loop.
+    #   After that phase the longest PID 1 silence measured on that drive was
+    #   9 s, so a boot that hangs later is still reset.
     #   RebootWatchdogSec stays off: the driver cannot go beyond 16 s and the
     #   sync in systemd-shutdown may take longer than that without a ping.
     #   ponytail: a daemon-reexec (systemd upgrade) rereads system.conf and
@@ -180,8 +183,8 @@ hardenAgainstPowerCuts() {
     mkdir -p /etc/systemd/journald.conf.d /etc/systemd/system.conf.d
     printf '[Journal]\nStorage=volatile\nRuntimeMaxUse=32M\n' > /etc/systemd/journald.conf.d/10-smartpi-journal.conf
     printf '[Manager]\nRebootWatchdogSec=off\n' > /etc/systemd/system.conf.d/10-smartpi-watchdog.conf
-    printf '%s\n' '[Unit]' 'Description=Arm the hardware watchdog once the boot is over' 'DefaultDependencies=no' \
-        'After=multi-user.target' '' '[Service]' 'Type=oneshot' \
+    printf '%s\n' '[Unit]' 'Description=Arm the hardware watchdog once systemd has loaded its units' \
+        '' '[Service]' 'Type=oneshot' \
         'ExecStart=/usr/bin/busctl set-property org.freedesktop.systemd1 /org/freedesktop/systemd1 org.freedesktop.systemd1.Manager RuntimeWatchdogUSec t 16000000' \
         '' '[Install]' 'WantedBy=multi-user.target' > /etc/systemd/system/smartpi-watchdog.service
     systemctl enable smartpi-watchdog.service
