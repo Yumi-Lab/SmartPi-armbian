@@ -1,0 +1,79 @@
+From: Nicolas Michaut <nicolas@yumilab.com>
+Subject: [PATCH] sunxi: boot whatever system is plugged in, never stop on a keyboard
+Date: 2026-10-13
+
+The H3 boot ROM only starts from the SD card, so U-Boot always comes from
+it, but the operating system it then loads can live elsewhere. Look for it
+on every USB storage device first, then on the SD card:
+
+- A USB stick or SSD holding a system boots instead of the card's system,
+  which is left untouched: a rescue path when the card's system no longer
+  boots, and a way to try another system without reflashing the card.
+  Up to four USB storage devices are tried, not just the first one, so a
+  data stick or an empty slot of a card reader plugged in next to the
+  system drive no longer hides it, behind a hub as well.
+- The network targets are dropped: this U-Boot has no Ethernet driver on
+  the board ("No ethernet found"), so they could never boot anything.
+- When nothing is bootable, say so on the screen and start over every
+  10 s instead of sitting at the prompt: plugging in a USB stick or a card
+  holding a system is enough to boot it.
+
+U-Boot reads only the serial console. On Allwinner it also read any USB
+keyboard, and an inexpensive keyboard sends a key as soon as it is
+detected: with one plugged in at power-on, directly or through a hub, the
+autoboot countdown stopped on its own and the board sat at the U-Boot
+prompt with nothing on the screen telling why. Unplugging the keyboard
+then flooded the screen with USB errors. Since the keyboard was the only
+reason to start USB before the countdown, preboot is now empty; USB still
+starts when the boot targets are scanned.
+
+Signed-off-by: Nicolas Michaut <nicolas@yumilab.com>
+---
+--- a/include/configs/sunxi-common.h
++++ b/include/configs/sunxi-common.h
+@@ -191,7 +191,8 @@
+ #endif
+ 
+ #ifdef CONFIG_USB_STORAGE
+-#define BOOT_TARGET_DEVICES_USB(func) func(USB, usb, 0)
++#define BOOT_TARGET_DEVICES_USB(func) \
++	func(USB, usb, 0) func(USB, usb, 1) func(USB, usb, 2) func(USB, usb, 3)
+ #else
+ #define BOOT_TARGET_DEVICES_USB(func)
+ #endif
+@@ -220,11 +221,9 @@
+ 
+ #define BOOT_TARGET_DEVICES(func) \
+ 	func(FEL, fel, na) \
+-	BOOT_TARGET_DEVICES_MMC(func) \
+-	BOOT_TARGET_DEVICES_SCSI(func) \
+ 	BOOT_TARGET_DEVICES_USB(func) \
+-	BOOT_TARGET_DEVICES_PXE(func) \
+-	BOOT_TARGET_DEVICES_DHCP(func)
++	BOOT_TARGET_DEVICES_MMC(func) \
++	BOOT_TARGET_DEVICES_SCSI(func)
+ 
+ #ifdef CONFIG_OLD_SUNXI_KERNEL_COMPAT
+ #define BOOTCMD_SUNXI_COMPAT \
+@@ -244,13 +243,8 @@
+ 
+ #include <config_distro_bootcmd.h>
+ 
+-#ifdef CONFIG_USB_KEYBOARD
+ #define CONSOLE_STDIN_SETTINGS \
+-	"stdin=serial,usbkbd\0"
+-#else
+-#define CONSOLE_STDIN_SETTINGS \
+ 	"stdin=serial\0"
+-#endif
+ 
+ #ifdef CONFIG_VIDEO
+ #define CONSOLE_STDOUT_SETTINGS \
+--- a/configs/smartpi1_defconfig
++++ b/configs/smartpi1_defconfig
+@@ -14,3 +14,5 @@
+ CONFIG_BMP_24BPP=y
+ CONFIG_BMP_32BPP=y
+ CONFIG_SYS_BOARD="smartpi1"
++CONFIG_PREBOOT=""
++CONFIG_BOOTCOMMAND="run distro_bootcmd; echo; echo No system found on USB or on the SD card. Trying again in 10 s.; sleep 10; reset"
