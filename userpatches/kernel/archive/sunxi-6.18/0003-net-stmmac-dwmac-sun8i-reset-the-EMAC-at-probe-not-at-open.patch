@@ -1,0 +1,129 @@
+From: Nicolas Michaut <nicolas@yumilab.com>
+Subject: [PATCH] net: stmmac: dwmac-sun8i: reset the EMAC at probe, not at open
+Date: 2026-10-12
+
+Undo Armbian's patches.armbian/drv-net-stmmac-dwmac-sun8i-reset-emac-on-open.patch
+(armbian/build #10492, in the sunxi-6.18 series since 2026-09-07) for this
+board: it brings the driver back to mainline.
+
+That patch moves the MAC soft reset into sun8i_dwmac_dma_reset(), which
+stmmac calls at every ndo_open. The soft reset only completes while the
+PHY drives the receive clock. When the H3 internal PHY runs on the Generic
+PHY driver and no cable is plugged in, it does not complete within the
+100 ms the driver waits:
+
+  dwmac-sun8i 1c30000.ethernet eth0: Failed to reset the dma
+  dwmac-sun8i 1c30000.ethernet eth0: stmmac_hw_setup: DMA engine initialization failed
+  dwmac-sun8i 1c30000.ethernet eth0: __stmmac_open: Hw setup failed
+
+The open fails, eth0 stays down, and since a down interface does not watch
+its link, a cable plugged in afterwards is never seen: no Ethernet until
+the next boot with the cable in, or a manual "ip link set eth0 up".
+
+A freshly flashed image is exactly in that situation: its initramfs holds
+no PHY driver at all (checked in the published 2026-10-11-1408 image: 241
+modules, none from drivers/net/phy), phylib only asks for the driver
+module when it creates the PHY, 2 s into the boot, so ac200-phy cannot be
+loaded and the PHY falls back to "Generic PHY". Once an initramfs has been
+regenerated on the board (646 modules, ac200-phy included) the PHY gets
+"Allwinner AC200 EPHY" instead and the reset passes, which is why the
+fault seems to come and go.
+
+Measured on a SmartPi One, no cable, 6.18.56 (2026-10-12):
+  - Armbian's patch, Generic PHY:   7 boots, 7 failures (4 on the fresh
+    image, 3 with ac200_phy blacklisted to pin the driver)
+  - Armbian's patch, AC200 EPHY:    9 boots with a regenerated initramfs,
+    0 failure
+  - this patch, Generic PHY:        4 boots, 0 failure
+  - this patch, AC200 EPHY:         2 boots, 0 failure
+
+Armbian's patch fixes Ethernet lost after a warm reboot on H616/H618
+boards with an external PHY. The SmartPi One only has the internal PHY,
+which the driver powers and resets itself at probe, so that case does
+not apply here.
+
+If Armbian drops or reworks its patch, this one stops applying and the
+build says so: delete this file then.
+
+Signed-off-by: Nicolas Michaut <nicolas@yumilab.com>
+---
+ drivers/net/ethernet/stmicro/stmmac/dwmac-sun8i.c | 49 ++++------
+ 1 file changed, 19 insertions(+), 30 deletions(-)
+
+diff --git a/drivers/net/ethernet/stmicro/stmmac/dwmac-sun8i.c b/drivers/net/ethernet/stmicro/stmmac/dwmac-sun8i.c
+--- a/drivers/net/ethernet/stmicro/stmmac/dwmac-sun8i.c
++++ b/drivers/net/ethernet/stmicro/stmmac/dwmac-sun8i.c
+@@ -272,34 +272,8 @@
+ /* sun8i_dwmac_dma_reset() - reset the EMAC
+  * Called from stmmac via stmmac_dma_ops->reset
+  */
+-static int sun8i_dwmac_soft_reset(void __iomem *ioaddr)
+-{
+-	u32 v;
+-
+-	v = readl(ioaddr + EMAC_BASIC_CTL1);
+-	writel(v | 0x01, ioaddr + EMAC_BASIC_CTL1);
+-
+-	/* The timeout was previoulsy set to 10ms, but some board (OrangePI0)
+-	 * need more if no cable plugged. 100ms seems OK
+-	 */
+-	return readl_poll_timeout(ioaddr + EMAC_BASIC_CTL1, v,
+-				  !(v & 0x01), 100, 100000);
+-}
+-
+ static int sun8i_dwmac_dma_reset(void __iomem *ioaddr)
+ {
+-	int err;
+-
+-	/* The MAC soft reset only completes once the PHY is driving the RX
+-	 * clock. Doing it here rather than at probe means phylib has already
+-	 * attached and resumed the PHY, so the clock is running by
+-	 * construction -- including after a warm reboot that left the PHY
+-	 * powered down.
+-	 */
+-	err = sun8i_dwmac_soft_reset(ioaddr);
+-	if (err)
+-		return err;
+-
+ 	writel(0, ioaddr + EMAC_RX_CTL1);
+ 	writel(0, ioaddr + EMAC_TX_CTL1);
+ 	writel(0, ioaddr + EMAC_RX_FRM_FLT);
+@@ -766,12 +740,23 @@
+ 
+ static int sun8i_dwmac_reset(struct stmmac_priv *priv)
+ {
+-	int err = sun8i_dwmac_soft_reset(priv->ioaddr);
++	u32 v;
++	int err;
+ 
+-	if (err)
+-		dev_err(priv->device, "EMAC reset timeout\n");
++	v = readl(priv->ioaddr + EMAC_BASIC_CTL1);
++	writel(v | 0x01, priv->ioaddr + EMAC_BASIC_CTL1);
+ 
+-	return err;
++	/* The timeout was previoulsy set to 10ms, but some board (OrangePI0)
++	 * need more if no cable plugged. 100ms seems OK
++	 */
++	err = readl_poll_timeout(priv->ioaddr + EMAC_BASIC_CTL1, v,
++				 !(v & 0x01), 100, 100000);
++
++	if (err) {
++		dev_err(priv->device, "EMAC reset timeout\n");
++		return err;
++	}
++	return 0;
+ }
+ 
+ /* Search in mdio-mux node for internal PHY node and get its clk/reset */
+@@ -1240,6 +1225,10 @@
+ 			dev_err(&pdev->dev, "Failed to register mux\n");
+ 			goto dwmac_mux;
+ 		}
++	} else {
++		ret = sun8i_dwmac_reset(priv);
++		if (ret)
++			goto dwmac_remove;
+ 	}
+ 
+ 	pm_runtime_put(&pdev->dev);
