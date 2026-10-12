@@ -1,0 +1,33 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yumi-Lab <nicolas@yumi-lab.com>
+Date: Mon, 12 Oct 2026 07:00:00 +0800
+Subject: [PATCH] fdrv: log the management frame confirm with the driver's own
+ macro
+
+rwnx_tx.c holds the only trace_printk() of the two modules we build. A
+module that contains one makes the kernel print, when it is loaded:
+
+  ** trace_printk() being used. Allocating extra memory.  **
+  ** This means that this is a DEBUG kernel and it is     **
+  ** unsafe for production use.                           **
+
+and allocate the trace_printk buffers, on a board with 1 GB of RAM. Seen
+on a SmartPi One as soon as aic8800_fdrv is loaded (2026-10-12). Use
+AICWFDBG(LOGDEBUG, ...) like the rest of the file: same message, printed
+only when the driver's debug level asks for it.
+---
+ aic8800_fdrv/rwnx_tx.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/aic8800_fdrv/rwnx_tx.c b/aic8800_fdrv/rwnx_tx.c
+--- a/aic8800_fdrv/rwnx_tx.c
++++ b/aic8800_fdrv/rwnx_tx.c
+@@ -2391,7 +2391,7 @@
+ 
+     /* Update txq and HW queue credits */
+     if (sw_txhdr->desc.host.flags & TXU_CNTRL_MGMT) {
+-        trace_printk("done=%d retry_required=%d sw_retry_required=%d acknowledged=%d\n",
++        AICWFDBG(LOGDEBUG, "done=%d retry_required=%d sw_retry_required=%d acknowledged=%d\n",
+                      rwnx_txst.tx_done, rwnx_txst.retry_required,
+                      rwnx_txst.sw_retry_required, rwnx_txst.acknowledged);
+ #ifdef CREATE_TRACE_POINTS
