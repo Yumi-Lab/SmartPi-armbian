@@ -12,6 +12,19 @@ enable_extension "rtl8188eu-ap"
 # AIC8800 USB WiFi 6 + Bluetooth dongles work as soon as they are plugged in (userpatches/extensions/).
 enable_extension "aic8800-usb"
 
+# RTL8812AU / RTL8821AU USB WiFi dongles (0bda:8812 and kin). Armbian builds
+# Realtek's out-of-tree 8812au driver into kernels older than 6.17 only and does
+# not enable the in-kernel rtw88 drivers that replace it, so on 6.18 these
+# dongles showed up in lsusb with no interface. The firmware
+# (rtw88/rtw8812a_fw.bin, rtw8821a_fw.bin) is already in armbian-firmware.
+function custom_kernel_config__smartpi1_rtw88_88xxau() {
+	linux-version compare "${KERNEL_MAJOR_MINOR}" ge 6.17 || return 0
+	kernel_config_modifying_hashes+=("rtw88_8812au_8821au=m")
+	[[ ! -f .config ]] && return 0
+	kernel_config_set_m CONFIG_RTW88_8812AU
+	kernel_config_set_m CONFIG_RTW88_8821AU
+}
+
 # Replace U-Boot's built-in logo with the Yumi one. It is drawn the instant the
 # video device is probed — before any file is read from the SD card — so it
 # appears immediately, unlike /boot/boot.bmp which the boot script displays
