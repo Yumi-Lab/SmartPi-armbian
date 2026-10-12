@@ -1,0 +1,26 @@
+#!/bin/sh
+# Desktop images: open the desktop of the first user (uid 1000: pi, or the one
+# user-data names) without a login prompt, as Armbian does after its
+# first-login wizard and Raspberry Pi OS does by default. Run once by
+# smartpi-desktop-autologin.service, after cloud-init has created that user.
+# Delete /etc/lightdm/lightdm.conf.d/22-smartpi-autologin.conf to get the
+# login screen back; it is not written again.
+set -e
+user=$(getent passwd 1000 | cut -d: -f1)
+[ -n "$user" ] || exit 0   # cloud-init has not created the user: try again next boot
+
+# The desktop this image ships; without it lightdm would fall back to a
+# session that may not be installed and stop at the login screen.
+session=
+for s in xfce mate i3; do
+    if [ -f "/usr/share/xsessions/$s.desktop" ]; then session=$s; break; fi
+done
+
+mkdir -p /etc/lightdm/lightdm.conf.d /var/lib/smartpi
+{
+    echo "[Seat:*]"
+    echo "autologin-user=$user"
+    echo "autologin-user-timeout=0"
+    if [ -n "$session" ]; then echo "autologin-session=$session"; fi
+} > /etc/lightdm/lightdm.conf.d/22-smartpi-autologin.conf
+touch /var/lib/smartpi/desktop-autologin-done

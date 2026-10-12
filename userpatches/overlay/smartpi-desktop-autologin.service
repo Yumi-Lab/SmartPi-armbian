@@ -1,0 +1,12 @@
+[Unit]
+Description=Open the desktop of the first user without a login prompt
+After=cloud-init.service
+Before=display-manager.service
+ConditionPathExists=!/var/lib/smartpi/desktop-autologin-done
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/smartpi-desktop-autologin
+
+[Install]
+WantedBy=graphical.target

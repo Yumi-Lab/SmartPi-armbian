@@ -41,6 +41,7 @@ Main() {
             hardenAgainstPowerCuts
             installBootTelemetry
             if [[ "${BUILD_DESKTOP}" = "yes" ]]; then
+                enableDesktopLogin
                 installRotationScript
                 patchLightdm
                 copyOnboardConf
@@ -250,6 +251,27 @@ EOF
     echo "SmartPad rotation script ... [DONE]"
 }
 
+enableDesktopLogin() {
+    # Armbian enables the display manager and the desktop autologin from its
+    # first-login wizard, once the user exists. Its cloud-init extension
+    # removes that wizard, so the desktop images booted to a text console with
+    # lightdm installed but never started. lightdm is the display manager from
+    # the start, and a one-shot unit gives the first user's desktop without a
+    # login prompt once cloud-init has created that user.
+    echo "Enable the desktop login ..."
+    if [[ ! -x /usr/sbin/lightdm ]]; then
+        echo "WARNING: lightdm is not installed, the desktop stays off"
+        return 0
+    fi
+    ln -sfv /lib/systemd/system/lightdm.service /etc/systemd/system/display-manager.service
+    cp -v /tmp/overlay/smartpi-desktop-autologin /usr/local/sbin/smartpi-desktop-autologin
+    chmod 755 /usr/local/sbin/smartpi-desktop-autologin
+    cp -v /tmp/overlay/smartpi-desktop-autologin.service /etc/systemd/system/smartpi-desktop-autologin.service
+    chmod 644 /etc/systemd/system/smartpi-desktop-autologin.service
+    systemctl enable smartpi-desktop-autologin.service
+    echo "Enable the desktop login ... [DONE]"
+}
+
 patchLightdm() {
     local conf="/etc/lightdm/lightdm.conf.d/12-onboard.conf"
     echo "Enable OnScreen Keyboard in Lightdm ..."
@@ -318,6 +340,13 @@ installCloudInitDefaults() {
     echo "Install cloud-init first-boot files ..."
     cp -v /tmp/overlay/cloud-init-user-data /boot/user-data
     cp -v /tmp/overlay/cloud-init-network-config /boot/network-config
+    if [[ "${RELEASE}" == "bullseye" ]]; then
+        # cloud-init 20.4 only unwraps a top-level "network:" key that also
+        # holds "config:"; it rejected this file ("failed stage init-local")
+        # and applied no network setting. Same settings without that key;
+        # newer releases keep the Raspberry Pi OS format Imager writes.
+        sed -i -e '/^network:$/d' -e 's/^  //' -e 's/^#  /#/' /boot/network-config
+    fi
     cp -v /tmp/overlay/cloud-init-default-user.cfg /etc/cloud/cloud.cfg.d/90-smartpi-default-user.cfg
     chmod 644 /boot/user-data /boot/network-config
     rm -fv /boot/user-data.template
