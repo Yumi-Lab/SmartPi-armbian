@@ -344,11 +344,15 @@ installCloudInitDefaults() {
     cp -v /tmp/overlay/cloud-init-user-data /boot/user-data
     cp -v /tmp/overlay/cloud-init-network-config /boot/network-config
     if [[ "${RELEASE}" == "bullseye" ]]; then
-        # cloud-init 20.4 only unwraps a top-level "network:" key that also
-        # holds "config:"; it rejected this file ("failed stage init-local")
-        # and applied no network setting. Same settings without that key;
-        # newer releases keep the Raspberry Pi OS format Imager writes.
-        sed -i -e '/^network:$/d' -e 's/^  //' -e 's/^#  /#/' /boot/network-config
+        # Debian 11's cloud-init 20.4 cannot apply network-config here: it
+        # rejected the Raspberry Pi OS format ("failed stage init-local"), and
+        # once reformatted it rendered eth0 for ifupdown, which fails at boot
+        # without a cable, never picks one up later and cannot do WiFi (no
+        # NetworkManager renderer before cloud-init 22.3). NetworkManager keeps
+        # the network, as on the other images; no network-config on this
+        # release.
+        printf 'network:\n  config: disabled\n' > /etc/cloud/cloud.cfg.d/99-smartpi-network.cfg
+        rm -fv /boot/network-config
     fi
     cp -v /tmp/overlay/cloud-init-default-user.cfg /etc/cloud/cloud.cfg.d/90-smartpi-default-user.cfg
     chmod 644 /boot/user-data /boot/network-config
