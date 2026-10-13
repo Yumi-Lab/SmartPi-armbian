@@ -255,31 +255,60 @@ EOF
 }
 
 enableDesktopLogin() {
-    # Armbian enables the display manager and the desktop autologin from its
-    # first-login wizard, once the user exists. Its cloud-init extension
-    # removes that wizard, so the desktop images booted to a text console with
-    # lightdm installed but never started. lightdm is the display manager from
-    # the start, and a one-shot unit gives the first user's desktop without a
-    # login prompt once cloud-init has created that user.
-    echo "Enable the desktop login ..."
+    # Armbian enables the display manager from its first-login wizard, once the
+    # user exists; its cloud-init extension removes that wizard, so the desktop
+    # images booted to a text console with lightdm never started. lightdm is
+    # the display manager from the start, and smartpi-desktop-session decides
+    # before each start until a desktop account is set: a card flashed as-is
+    # (still pi / yumi) opens the SmartPi first-boot wizard (root password,
+    # user, its password and real name in the order of Armbian's first login,
+    # then language, keyboard, time zone, WiFi), a card set up with Raspberry
+    # Pi Imager opens the desktop of its account. Either way the desktop then
+    # opens without a login prompt, as on Raspberry Pi OS.
+    echo "Enable the desktop login and the first-boot wizard ..."
     if [[ ! -x /usr/sbin/lightdm ]]; then
         echo "WARNING: lightdm is not installed, the desktop stays off"
         return 0
     fi
+    # what the wizard runs on: GTK 3 from Python, the on-screen keyboard, xrandr/xset/xwininfo
+    apt-get install -y --no-install-recommends python3-gi gir1.2-gtk-3.0 onboard x11-xserver-utils x11-utils
     ln -sfv /lib/systemd/system/lightdm.service /etc/systemd/system/display-manager.service
-    cp -v /tmp/overlay/smartpi-desktop-autologin /usr/local/sbin/smartpi-desktop-autologin
-    chmod 755 /usr/local/sbin/smartpi-desktop-autologin
-    cp -v /tmp/overlay/smartpi-desktop-autologin.service /etc/systemd/system/smartpi-desktop-autologin.service
-    chmod 644 /etc/systemd/system/smartpi-desktop-autologin.service
-    systemctl enable smartpi-desktop-autologin.service
-    echo "Enable the desktop login ... [DONE]"
+    local src=/tmp/overlay/firstboot-wizard
+    install -D -m 755 "${src}/firstboot-wizard" /usr/local/lib/smartpi/firstboot-wizard
+    install -d /usr/share/smartpi/firstboot && cp -v "${src}"/assets/*.svg /usr/share/smartpi/firstboot/
+    install -m 755 "${src}/smartpi-firstboot-apply" "${src}/smartpi-desktop-session" /usr/local/sbin/
+    install -m 644 "${src}/smartpi-desktop-session.service" /etc/systemd/system/
+    install -m 644 "${src}/smartpi-setup.desktop" /usr/share/xsessions/
+    # the wizard's session runs as this system user; root only for applying the result
+    local groups
+    groups=$(for g in video audio netdev; do getent group "${g}" > /dev/null && printf '%s,' "${g}"; done)
+    useradd --system --create-home --home-dir /var/lib/smartpi-setup --shell /bin/bash \
+        ${groups:+--groups "${groups%,}"} smartpi-setup
+    echo "smartpi-setup ALL=(root) NOPASSWD: /usr/local/sbin/smartpi-firstboot-apply" > /etc/sudoers.d/smartpi-setup
+    chmod 440 /etc/sudoers.d/smartpi-setup
+    visudo -c -f /etc/sudoers.d/smartpi-setup
+    systemctl enable smartpi-desktop-session.service
+    echo "Enable the desktop login and the first-boot wizard ... [DONE]"
 }
 
 patchLightdm() {
-    local conf="/etc/lightdm/lightdm.conf.d/12-onboard.conf"
-    echo "Enable OnScreen Keyboard in Lightdm ..."
-    echo "onscreen-keyboard = true" | tee "${conf}"
-    echo "Enable OnScreen Keyboard in Lightdm ... [DONE]"
+    # The on-screen keyboard of the login screen is a setting of its greeter,
+    # slick-greeter, under [Greeter]; written to lightdm.conf.d without a group,
+    # lightdm only logged "Key file does not start with a group" and ignored it.
+    local conf=/etc/lightdm/slick-greeter.conf
+    echo "Enable OnScreen Keyboard in the login screen ..."
+    if grep -qE '^onscreen-keyboard[[:space:]]*=' "${conf}" 2> /dev/null; then
+        # Armbian ships "onscreen-keyboard = false": set it in place, whatever the spacing
+        sed -i -E 's/^onscreen-keyboard[[:space:]]*=.*/onscreen-keyboard = true/' "${conf}"
+    else
+        if ! grep -q '^\[Greeter\]' "${conf}" 2> /dev/null; then
+            # keys above any group make the whole file unreadable: the group goes first
+            if [[ -s "${conf}" ]]; then sed -i '1i [Greeter]' "${conf}"; else printf '[Greeter]\n' > "${conf}"; fi
+        fi
+        sed -i '/^\[Greeter\]/a onscreen-keyboard = true' "${conf}"
+    fi
+    grep -A3 '^\[Greeter\]' "${conf}"
+    echo "Enable OnScreen Keyboard in the login screen ... [DONE]"
 }
 
 copyOnboardConf() {

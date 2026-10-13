@@ -1,0 +1,4 @@
+[Desktop Entry]
+Name=SmartPi first boot
+Exec=/usr/local/lib/smartpi/firstboot-wizard
+Type=Application

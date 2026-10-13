@@ -1,0 +1,69 @@
+#!/usr/bin/python3
+# Applies what the first-boot wizard collected (JSON on stdin), as root through
+# sudo, in the order of Armbian's first login: the root password, the account
+# (the default pi account is renamed, so its groups and sudo carry over), its
+# password and real name; then keyboard, time zone, WiFi, and the desktop opens
+# on the new account. The shipped default password yumi is gone from both.
+import json, os, pwd, re, subprocess, sys
+
+d = json.load(sys.stdin)
+name, pw, root_pw = d["user"], d["password"], d["root_password"]
+if not re.match(r"^[a-z][a-z0-9_-]{0,31}$", name) or not pw or not root_pw:
+    sys.exit("invalid account name or empty password")
+GROUPS = "sudo,users,adm,dialout,audio,video,plugdev,netdev,i2c,spi,gpio"
+
+
+def sh(*cmd):
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    if r.returncode != 0:
+        sys.exit(f"{' '.join(cmd[:3])}: {r.stderr.strip()}")
+
+
+try:
+    first = pwd.getpwuid(1000).pw_name
+except KeyError:
+    first = None
+if first is None:
+    known = {g.split(":")[0] for g in open("/etc/group")}
+    sh("useradd", "-m", "-s", "/bin/bash", "-G", ",".join(g for g in GROUPS.split(",") if g in known), name)
+elif first != name:
+    sh("usermod", "-l", name, "-d", f"/home/{name}", "-m", first)
+    sh("groupmod", "-n", name, first)
+    for f in os.listdir("/etc/sudoers.d"):
+        p = f"/etc/sudoers.d/{f}"
+        t = open(p).read()
+        if re.search(rf"^{first}\s", t, re.M):
+            open(p, "w").write(re.sub(rf"^{first}(\s)", rf"{name}\1", t, flags=re.M))
+subprocess.run(["chpasswd"], input=f"{name}:{pw}\nroot:{root_pw}\n", text=True, check=True)
+if d.get("realname"):
+    sh("usermod", "-c", d["realname"], name)
+if d.get("locale"):
+    # the image ships en_US only: build the chosen language once, then make it the system's
+    loc = d["locale"]
+    have = subprocess.run(["locale", "-a"], capture_output=True, text=True).stdout.lower().replace("-", "")
+    if loc.lower().replace("-", "") not in have:
+        gen = open("/etc/locale.gen").read()
+        if f"# {loc} UTF-8" in gen:
+            open("/etc/locale.gen", "w").write(gen.replace(f"# {loc} UTF-8", f"{loc} UTF-8"))
+        elif f"{loc} UTF-8" not in gen:
+            open("/etc/locale.gen", "a").write(f"{loc} UTF-8\n")
+        subprocess.run(["locale-gen"], capture_output=True)
+    subprocess.run(["localectl", "set-locale", f"LANG={loc}"])
+if d.get("layout"):
+    lay, _, variant = d["layout"].partition(":")
+    subprocess.run(["localectl", "set-x11-keymap", lay, "", variant])
+if d.get("zone"):
+    subprocess.run(["timedatectl", "set-timezone", d["zone"]])
+wifi_note = ""
+if d.get("wifi"):
+    r = subprocess.run(["nmcli", "device", "wifi", "connect", d["wifi"], "password", d.get("wifi_password", "")],
+                       capture_output=True, text=True)
+    wifi_note = "" if r.returncode == 0 else " (WiFi not joined: " + r.stderr.strip()[:120] + ")"
+# the desktop of the new account without a login prompt, with the session this image ships
+sh("/usr/local/sbin/smartpi-desktop-session", "desktop")
+# the wizard cannot run again: its sudo rule and its session go
+for f in ("/etc/sudoers.d/smartpi-setup", "/usr/share/xsessions/smartpi-setup.desktop"):
+    if os.path.exists(f):
+        os.remove(f)
+subprocess.run(["systemd-run", "--no-block", "--on-active=3", "systemctl", "restart", "lightdm"])
+print("done" + wifi_note)

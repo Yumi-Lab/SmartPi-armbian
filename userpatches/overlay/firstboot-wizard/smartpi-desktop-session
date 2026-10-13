@@ -1,0 +1,29 @@
+#!/bin/sh
+# Before the desktop starts (smartpi-desktop-session.service, until a desktop
+# account is set): a card flashed as-is, still on the shipped pi / yumi
+# account, opens the first-boot wizard; an account already set (the user-data
+# of Raspberry Pi Imager, or the wizard, which runs this with "desktop" once
+# done) opens its desktop without a login prompt, as Armbian and Raspberry Pi
+# OS do. Delete /etc/lightdm/lightdm.conf.d/22-smartpi-autologin.conf to get
+# the login screen back.
+conf=/etc/lightdm/lightdm.conf.d/22-smartpi-autologin.conf
+mkdir -p /etc/lightdm/lightdm.conf.d /var/lib/smartpi
+user=$(getent passwd 1000 | cut -d: -f1)
+if [ "$1" != desktop ] && { [ -z "$user" ] ||
+    { [ "$user" = pi ] && perl -e '@e=getpwnam("pi"); exit(crypt("yumi",$e[1]) eq $e[1] ? 0 : 1)'; }; }; then
+    printf '[Seat:*]\nautologin-user=smartpi-setup\nautologin-session=smartpi-setup\nautologin-user-timeout=0\n' > "$conf"
+    exit 0
+fi
+# the desktop this image ships: without it lightdm may pick a session that is
+# not installed and stop at the login screen
+session=
+for s in xfce mate i3; do
+    if [ -f "/usr/share/xsessions/$s.desktop" ]; then session=$s; break; fi
+done
+{
+    echo "[Seat:*]"
+    echo "autologin-user=$user"
+    echo "autologin-user-timeout=0"
+    if [ -n "$session" ]; then echo "autologin-session=$session"; fi
+} > "$conf"
+echo "$user" > /var/lib/smartpi/desktop-set
