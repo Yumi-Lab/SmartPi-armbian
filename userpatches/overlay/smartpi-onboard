@@ -1,0 +1,15 @@
+#!/bin/sh
+# Onboard for the desktop session: hidden until a text field is touched, with
+# its floating keyboard icon always there for a finger or a mouse without a
+# keyboard, in the bottom-right corner of this screen (Onboard keeps absolute
+# positions: its default one sits on the title bars, and screens go from the
+# SmartPad's 800x480 to 4K). Onboard's preferences turn the icon off.
+size=$(xrandr 2>/dev/null | sed -n 's/.* current \([0-9]*\) x \([0-9]*\),.*/\1 \2/p')
+if [ -n "$size" ]; then
+    set -- $size
+    for o in landscape portrait; do
+        gsettings set org.onboard.icon-palette.$o x $(($1 - 88))
+        gsettings set org.onboard.icon-palette.$o y $(($2 - 88))
+    done
+fi
+exec onboard

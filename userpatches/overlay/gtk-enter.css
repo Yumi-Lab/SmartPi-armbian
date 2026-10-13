@@ -1,0 +1,9 @@
+/* Enter validates a field even with Shift down: the on-screen keyboard keeps a
+   locked Shift pressed, and GTK only takes a bare Return as "activate", so the
+   password of the login screen and the fields of the first-boot wizard could
+   not be validated. Installed for the login screen and the wizard only. */
+@binding-set enter-with-shift {
+    bind "<Shift>Return" { "activate" () };
+    bind "<Shift>KP_Enter" { "activate" () };
+}
+entry { -gtk-key-bindings: enter-with-shift; }

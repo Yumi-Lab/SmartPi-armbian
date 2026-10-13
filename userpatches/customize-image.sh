@@ -42,8 +42,9 @@ Main() {
             installBootTelemetry
             if [[ "${BUILD_DESKTOP}" = "yes" ]]; then
                 enableDesktopLogin
+                installHdmiHotplug
                 installRotationScript
-                patchLightdm
+                setUpTouchScreen
                 copyOnboardConf
                 patchOnboardAutostart
                 installScreensaverSetup
@@ -270,8 +271,10 @@ enableDesktopLogin() {
         echo "WARNING: lightdm is not installed, the desktop stays off"
         return 0
     fi
-    # what the wizard runs on: GTK 3 from Python, the on-screen keyboard, xrandr/xset/xwininfo
-    apt-get install -y --no-install-recommends python3-gi gir1.2-gtk-3.0 onboard x11-xserver-utils x11-utils
+    # what the wizard runs on: GTK 3 from Python, the on-screen keyboard, xrandr/xset/xwininfo;
+    # gir1.2-atspi-2.0, only recommended by onboard, is what lets it open on a touched text field
+    apt-get install -y --no-install-recommends python3-gi gir1.2-gtk-3.0 onboard gir1.2-atspi-2.0 \
+        x11-xserver-utils x11-utils
     ln -sfv /lib/systemd/system/lightdm.service /etc/systemd/system/display-manager.service
     local src=/tmp/overlay/firstboot-wizard
     install -D -m 755 "${src}/firstboot-wizard" /usr/local/lib/smartpi/firstboot-wizard
@@ -291,24 +294,53 @@ enableDesktopLogin() {
     echo "Enable the desktop login and the first-boot wizard ... [DONE]"
 }
 
-patchLightdm() {
-    # The on-screen keyboard of the login screen is a setting of its greeter,
-    # slick-greeter, under [Greeter]; written to lightdm.conf.d without a group,
-    # lightdm only logged "Key file does not start with a group" and ignored it.
-    local conf=/etc/lightdm/slick-greeter.conf
-    echo "Enable OnScreen Keyboard in the login screen ..."
-    if grep -qE '^onscreen-keyboard[[:space:]]*=' "${conf}" 2> /dev/null; then
-        # Armbian ships "onscreen-keyboard = false": set it in place, whatever the spacing
-        sed -i -E 's/^onscreen-keyboard[[:space:]]*=.*/onscreen-keyboard = true/' "${conf}"
-    else
-        if ! grep -q '^\[Greeter\]' "${conf}" 2> /dev/null; then
-            # keys above any group make the whole file unreadable: the group goes first
-            if [[ -s "${conf}" ]]; then sed -i '1i [Greeter]' "${conf}"; else printf '[Greeter]\n' > "${conf}"; fi
-        fi
-        sed -i '/^\[Greeter\]/a onscreen-keyboard = true' "${conf}"
+installHdmiHotplug() {
+    # X switches the screen off when it finds no monitor at start and never
+    # turns it back on: a screen switched off and on, or the half second the H3
+    # HDMI drops its hotplug line each time X starts (end of the first-boot
+    # wizard, log out, switch user: 3 starts out of 6 on a SmartPi), and the
+    # picture never comes back. The handler turns it back on at each hotplug.
+    echo "Install the HDMI hotplug handler ..."
+    install -m 755 /tmp/overlay/smartpi-hdmi-hotplug /usr/local/sbin/
+    install -m 644 /tmp/overlay/90-smartpi-hdmi-hotplug.rules /etc/udev/rules.d/
+    echo "Install the HDMI hotplug handler ... [DONE]"
+}
+
+setUpTouchScreen() {
+    # A finger on the desktop: the on-screen keyboard on the login and lock
+    # screen and, in the desktop, opening by itself on a touched text field;
+    # a tap opens the panel menus like a click; a double tap opens a folder.
+    echo "Set up the desktop for a touchscreen ..."
+    install -m 644 /tmp/overlay/90_smartpi-touch.gschema.override /usr/share/glib-2.0/schemas/
+    glib-compile-schemas /usr/share/glib-2.0/schemas
+    install -m 644 /tmp/overlay/60smartpi-touch /etc/X11/Xsession.d/
+    # Enter validates the login screen's password and the wizard's fields with Shift locked
+    local user home owner
+    for user in lightdm smartpi-setup; do
+        home=$(getent passwd "${user}" | cut -d: -f6) || continue
+        owner=(-o "${user}" -g "$(id -gn "${user}")")
+        install -d "${owner[@]}" "${home}/.config" "${home}/.config/gtk-3.0"
+        install -m 644 "${owner[@]}" /tmp/overlay/gtk-enter.css "${home}/.config/gtk-3.0/gtk.css"
+    done
+    # the web pages tell the on-screen keyboard about a touched field too
+    if [[ -d /etc/chromium.d ]]; then
+        install -m 644 /tmp/overlay/smartpi-onscreen-keyboard.chromium /etc/chromium.d/smartpi-onscreen-keyboard
     fi
-    grep -A3 '^\[Greeter\]' "${conf}"
-    echo "Enable OnScreen Keyboard in the login screen ... [DONE]"
+    # two taps of a finger land further apart than two clicks (5 px)
+    local xsettings=/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml
+    if [[ -f "${xsettings}" ]]; then
+        sed -i -E 's|(name="DoubleClickTime" type="int" value=)"[0-9]+"|\1"500"|
+                   s|(name="DoubleClickDistance" type="int" value=)"[0-9]+"|\1"24"|' "${xsettings}"
+        grep DoubleClick "${xsettings}"
+    fi
+    # lock and switch user in the user menu of the panel, which Armbian hides
+    local panel=/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml
+    if [[ -f "${panel}" ]]; then
+        sed -i -E 's/value="-(lock-screen|switch-user)"/value="+\1"/
+                   0,/value="-separator"/ s/value="-separator"/value="+separator"/' "${panel}"
+        grep -E 'lock-screen|switch-user' "${panel}"
+    fi
+    echo "Set up the desktop for a touchscreen ... [DONE]"
 }
 
 copyOnboardConf() {
@@ -323,8 +355,9 @@ patchOnboardAutostart() {
     echo "Patch Onboard Autostart file ..."
     if [[ -f "${conf}" ]]; then
         sed -i '/OnlyShowIn/s/^/# /' "${conf}"
-        # Start the on-screen keyboard only when the SmartPad touchscreen is present
-        sed -i 's|^Exec=.*|Exec=sh -c "/usr/local/bin/smartpad-detect.sh \&\& exec onboard"|' "${conf}"
+        # on every screen, hidden until a text field is touched or its floating icon is
+        install -m 755 /tmp/overlay/smartpi-onboard /usr/local/bin/
+        sed -i 's|^Exec=.*|Exec=/usr/local/bin/smartpi-onboard|' "${conf}"
     else
         echo "WARNING: ${conf} not found (is the onboard package installed?)"
     fi
