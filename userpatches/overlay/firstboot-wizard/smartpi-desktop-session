@@ -2,28 +2,48 @@
 # Before the desktop starts (smartpi-desktop-session.service, until a desktop
 # account is set): a card flashed as-is, still on the shipped pi / yumi
 # account, opens the first-boot wizard; an account already set (the user-data
-# of Raspberry Pi Imager, or the wizard, which runs this with "desktop" once
-# done) opens its desktop without a login prompt, as Armbian and Raspberry Pi
-# OS do. Delete /etc/lightdm/lightdm.conf.d/22-smartpi-autologin.conf to get
-# the login screen back.
+# of Raspberry Pi Imager) opens its desktop without a login prompt, as Armbian
+# and Raspberry Pi OS do. The wizard runs this with "pending" before it changes
+# anything, so a wizard cut short (power cut, reset) opens again at the next
+# start instead of leaving a renamed account on the shipped passwords; and with
+# "desktop", or "login" for a login prompt at each start, once done. Delete
+# /etc/lightdm/lightdm.conf.d/22-smartpi-autologin.conf to get the login
+# screen back.
 conf=/etc/lightdm/lightdm.conf.d/22-smartpi-autologin.conf
-mkdir -p /etc/lightdm/lightdm.conf.d /var/lib/smartpi
+state=/var/lib/smartpi
+mkdir -p /etc/lightdm/lightdm.conf.d "$state"
 user=$(getent passwd 1000 | cut -d: -f1)
-if [ "$1" != desktop ] && { [ -z "$user" ] ||
-    { [ "$user" = pi ] && perl -e '@e=getpwnam("pi"); exit(crypt("yumi",$e[1]) eq $e[1] ? 0 : 1)'; }; }; then
-    printf '[Seat:*]\nautologin-user=smartpi-setup\nautologin-session=smartpi-setup\nautologin-user-timeout=0\n' > "$conf"
-    exit 0
+case "$1" in
+pending)
+    touch "$state/wizard-pending"; sync; exit 0 ;;
+desktop | login) ;;
+*)
+    if [ -e "$state/wizard-pending" ] || [ -z "$user" ] ||
+        { [ "$user" = pi ] && perl -e '@e=getpwnam("pi"); exit(crypt("yumi",$e[1]) eq $e[1] ? 0 : 1)'; }; then
+        printf '[Seat:*]\nautologin-user=smartpi-setup\nautologin-session=smartpi-setup\nautologin-user-timeout=0\n' > "$conf"
+        exit 0
+    fi ;;
+esac
+if [ "$1" = login ]; then
+    rm -f "$conf"
+else
+    # the desktop this image ships: without it lightdm may pick a session that
+    # is not installed and stop at the login screen
+    session=
+    for s in xfce mate i3; do
+        if [ -f "/usr/share/xsessions/$s.desktop" ]; then session=$s; break; fi
+    done
+    {
+        echo "[Seat:*]"
+        echo "autologin-user=$user"
+        echo "autologin-user-timeout=0"
+        if [ -n "$session" ]; then echo "autologin-session=$session"; fi
+    } > "$conf"
 fi
-# the desktop this image ships: without it lightdm may pick a session that is
-# not installed and stop at the login screen
-session=
-for s in xfce mate i3; do
-    if [ -f "/usr/share/xsessions/$s.desktop" ]; then session=$s; break; fi
-done
-{
-    echo "[Seat:*]"
-    echo "autologin-user=$user"
-    echo "autologin-user-timeout=0"
-    if [ -n "$session" ]; then echo "autologin-session=$session"; fi
-} > "$conf"
-echo "$user" > /var/lib/smartpi/desktop-set
+echo "$user" > "$state/desktop-set"
+rm -f "$state/wizard-pending"
+# the wizard cannot run again: its sudo rule and its session go
+rm -f /etc/sudoers.d/smartpi-setup /usr/share/xsessions/smartpi-setup.desktop
+# the card commits its writes every 2 min (commit=120): a power cut right after
+# the desktop opens must not undo the accounts
+sync

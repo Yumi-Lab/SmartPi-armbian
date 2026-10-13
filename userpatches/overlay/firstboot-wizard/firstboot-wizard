@@ -15,6 +15,8 @@ gi.require_version("GdkX11", "3.0")
 from gi.repository import Gdk, GdkPixbuf, GdkX11, Gio, Gtk, GLib
 
 ASSETS = "/usr/share/smartpi/firstboot"
+YELLOW = "#FFC72C"   # Yumi yellow: the brand, the one action, the values to note
+SHIPPED = ("pi", "yumi")   # the account and password of a card flashed as-is (also root's password)
 
 # id, name shown, keyboard layout[:variant], locale, time zone, wizard language
 LANGUAGES = [
@@ -58,8 +60,8 @@ def matcher(query):
     return lambda s: all(rx.search(plain(s)) for rx in words)
 
 TEXT = {
-    "en": dict(root="Create root password", root2="Repeat root password", name="Your real name", keyboard="Keyboard", lang_ph="System language: type to search", lang_err="No language matches. Type another one.", welcome="Welcome", welcome_sub="Let's set up your SmartPi. It takes a minute.", start="Start",
-               go="Continue", back="Back", step="Step {} of {}", hint="Enter to continue  ·  Esc to go back",
+    "en": dict(root="Create root password", root2="Repeat root password", name="Your real name", autologin="Log in automatically", yes="Yes", no="No", keyboard="Keyboard", lang_ph="System language: type to search", lang_err="No language matches. Type another one.", welcome="Welcome", welcome_sub="Let's set up your SmartPi. It takes a minute.", start="Start",
+               go="Continue", skip="Keep factory settings", skip_title="Keep the factory settings?", skip_user="User", skip_pw="Password", skip_lang="Language *English*  ·  Time zone *UTC*", skip_auto="The desktop opens *without a password*", skip_go="Keep these settings", back="Back", step="Step {} of {}", hint="Enter to continue  ·  Esc to go back",
                hint_kbd="Press Enter to continue  ·  Esc to go back", zone_ph="Time zone: type a city, e.g. Paris",
                zone_err="No time zone matches. Type another city.", acc="Choose a username", acc_help="For example your first name. Lowercase letters, digits, - and _, starting with a letter.",
                acc_err="Use lowercase letters, digits, - or _, starting with a letter.", pw="Create the password for user {user}", pw_err="Choose a password.",
@@ -69,8 +71,8 @@ TEXT = {
                wifi_err="Pick a network, or No WiFi for now.", wpw="Password for {}", wpw_ph="WiFi password",
                apply="Setting up your SmartPi", apply_sub="Your desktop opens in a few seconds.",
                show="Show the password", by="by", failed="Setup failed."),
-    "fr": dict(root="Créez le mot de passe root", root2="Répétez le mot de passe root", name="Votre nom complet", keyboard="Clavier", lang_ph="Langue du système : tapez pour chercher", lang_err="Aucune langue ne correspond. Essayez-en une autre.", welcome="Bienvenue", welcome_sub="Configurons votre SmartPi. Cela prend une minute.", start="Commencer",
-               go="Continuer", back="Retour", step="Étape {} sur {}", hint="Entrée pour continuer  ·  Échap pour revenir",
+    "fr": dict(root="Créez le mot de passe root", root2="Répétez le mot de passe root", name="Votre nom complet", autologin="Ouvrir la session automatiquement", yes="Oui", no="Non", keyboard="Clavier", lang_ph="Langue du système : tapez pour chercher", lang_err="Aucune langue ne correspond. Essayez-en une autre.", welcome="Bienvenue", welcome_sub="Configurons votre SmartPi. Cela prend une minute.", start="Commencer",
+               go="Continuer", skip="Garder les réglages d'usine", skip_title="Garder les réglages d'usine ?", skip_user="Utilisateur", skip_pw="Mot de passe", skip_lang="Langue *anglais*  ·  Fuseau *UTC*", skip_auto="Le bureau s'ouvre *sans mot de passe*", skip_go="Garder ces réglages", back="Retour", step="Étape {} sur {}", hint="Entrée pour continuer  ·  Échap pour revenir",
                hint_kbd="Appuyez sur Entrée pour continuer  ·  Échap pour revenir", zone_ph="Fuseau horaire : tapez une ville, par ex. Paris",
                zone_err="Aucun fuseau ne correspond. Tapez une autre ville.", acc="Choisissez un nom d'utilisateur", acc_help="Par exemple votre prénom. Minuscules, chiffres, - et _, en commençant par une lettre.",
                acc_err="Minuscules, chiffres, - ou _, en commençant par une lettre.", pw="Créez le mot de passe de l'utilisateur {user}",
@@ -79,8 +81,8 @@ TEXT = {
                wifi_err="Choisissez un réseau, ou Pas de Wi-Fi.", wpw="Mot de passe de {}", wpw_ph="Mot de passe Wi-Fi",
                apply="Configuration de votre SmartPi", apply_sub="Votre bureau s'ouvre dans quelques secondes.",
                show="Afficher le mot de passe", by="par", failed="La configuration a échoué."),
-    "de": dict(root="Root-Passwort erstellen", root2="Root-Passwort wiederholen", name="Ihr vollständiger Name", keyboard="Tastatur", lang_ph="Systemsprache: zum Suchen tippen", lang_err="Keine Sprache gefunden. Andere eingeben.", welcome="Willkommen", welcome_sub="Richten wir Ihren SmartPi ein. Das dauert eine Minute.", start="Los geht's",
-               go="Weiter", back="Zurück", step="Schritt {} von {}", hint="Enter zum Fortfahren  ·  Esc für zurück",
+    "de": dict(root="Root-Passwort erstellen", root2="Root-Passwort wiederholen", name="Ihr vollständiger Name", autologin="Automatisch anmelden", yes="Ja", no="Nein", keyboard="Tastatur", lang_ph="Systemsprache: zum Suchen tippen", lang_err="Keine Sprache gefunden. Andere eingeben.", welcome="Willkommen", welcome_sub="Richten wir Ihren SmartPi ein. Das dauert eine Minute.", start="Los geht's",
+               go="Weiter", skip="Werkseinstellungen behalten", skip_title="Werkseinstellungen behalten?", skip_user="Benutzer", skip_pw="Passwort", skip_lang="Sprache *Englisch*  ·  Zeitzone *UTC*", skip_auto="Der Desktop öffnet sich *ohne Passwort*", skip_go="Diese Einstellungen behalten", back="Zurück", step="Schritt {} von {}", hint="Enter zum Fortfahren  ·  Esc für zurück",
                hint_kbd="Drücken Sie Enter zum Fortfahren  ·  Esc für zurück", zone_ph="Zeitzone: Stadt eingeben, z. B. Berlin",
                zone_err="Keine Zeitzone gefunden. Andere Stadt eingeben.", acc="Benutzernamen wählen", acc_help="Zum Beispiel Ihr Vorname. Kleinbuchstaben, Ziffern, - und _, beginnend mit einem Buchstaben.",
                acc_err="Kleinbuchstaben, Ziffern, - oder _, beginnend mit einem Buchstaben.", pw="Passwort für Benutzer {user} erstellen", pw_err="Wählen Sie ein Passwort.",
@@ -90,8 +92,8 @@ TEXT = {
                wifi_err="Wählen Sie ein Netzwerk oder Kein WLAN.", wpw="Passwort für {}", wpw_ph="WLAN-Passwort",
                apply="Ihr SmartPi wird eingerichtet", apply_sub="Ihr Desktop öffnet sich in wenigen Sekunden.",
                show="Passwort anzeigen", by="von", failed="Einrichtung fehlgeschlagen."),
-    "es": dict(root="Crea la contraseña de root", root2="Repite la contraseña de root", name="Tu nombre completo", keyboard="Teclado", lang_ph="Idioma del sistema: escribe para buscar", lang_err="Ningún idioma coincide. Escribe otro.", welcome="Bienvenido", welcome_sub="Configuremos tu SmartPi. Solo lleva un minuto.", start="Empezar",
-               go="Continuar", back="Atrás", step="Paso {} de {}", hint="Intro para continuar  ·  Esc para volver",
+    "es": dict(root="Crea la contraseña de root", root2="Repite la contraseña de root", name="Tu nombre completo", autologin="Iniciar sesión automáticamente", yes="Sí", no="No", keyboard="Teclado", lang_ph="Idioma del sistema: escribe para buscar", lang_err="Ningún idioma coincide. Escribe otro.", welcome="Bienvenido", welcome_sub="Configuremos tu SmartPi. Solo lleva un minuto.", start="Empezar",
+               go="Continuar", skip="Mantener ajustes de fábrica", skip_title="¿Mantener los ajustes de fábrica?", skip_user="Usuario", skip_pw="Contraseña", skip_lang="Idioma *inglés*  ·  Zona horaria *UTC*", skip_auto="El escritorio se abre *sin contraseña*", skip_go="Mantener estos ajustes", back="Atrás", step="Paso {} de {}", hint="Intro para continuar  ·  Esc para volver",
                hint_kbd="Pulsa Intro para continuar  ·  Esc para volver", zone_ph="Zona horaria: escribe una ciudad, p. ej. Madrid",
                zone_err="Ninguna zona coincide. Escribe otra ciudad.", acc="Elige un nombre de usuario", acc_help="Por ejemplo tu nombre. Minúsculas, cifras, - y _, empezando por una letra.",
                acc_err="Usa minúsculas, cifras, - o _, empezando por una letra.", pw="Crea la contraseña del usuario {user}", pw_err="Elige una contraseña.",
@@ -100,8 +102,8 @@ TEXT = {
                wifi_searching="Buscando redes…", wifi_err="Elige una red, o Sin Wi-Fi.", wpw="Contraseña de {}",
                wpw_ph="Contraseña Wi-Fi", apply="Configurando tu SmartPi", apply_sub="Tu escritorio se abre en unos segundos.",
                show="Mostrar la contraseña", by="por", failed="La configuración falló."),
-    "it": dict(root="Crea la password di root", root2="Ripeti la password di root", name="Il tuo nome completo", keyboard="Tastiera", lang_ph="Lingua del sistema: scrivi per cercare", lang_err="Nessuna lingua corrisponde. Scrivine un'altra.", welcome="Benvenuto", welcome_sub="Configuriamo il tuo SmartPi. Ci vuole un minuto.", start="Inizia",
-               go="Continua", back="Indietro", step="Passo {} di {}", hint="Invio per continuare  ·  Esc per tornare",
+    "it": dict(root="Crea la password di root", root2="Ripeti la password di root", name="Il tuo nome completo", autologin="Accedi automaticamente", yes="Sì", no="No", keyboard="Tastiera", lang_ph="Lingua del sistema: scrivi per cercare", lang_err="Nessuna lingua corrisponde. Scrivine un'altra.", welcome="Benvenuto", welcome_sub="Configuriamo il tuo SmartPi. Ci vuole un minuto.", start="Inizia",
+               go="Continua", skip="Mantieni impostazioni di fabbrica", skip_title="Mantenere le impostazioni di fabbrica?", skip_user="Utente", skip_pw="Password", skip_lang="Lingua *inglese*  ·  Fuso orario *UTC*", skip_auto="Il desktop si apre *senza password*", skip_go="Mantieni queste impostazioni", back="Indietro", step="Passo {} di {}", hint="Invio per continuare  ·  Esc per tornare",
                hint_kbd="Premi Invio per continuare  ·  Esc per tornare", zone_ph="Fuso orario: scrivi una città, es. Roma",
                zone_err="Nessun fuso corrisponde. Scrivi un'altra città.", acc="Scegli un nome utente", acc_help="Ad esempio il tuo nome. Minuscole, cifre, - e _, iniziando con una lettera.",
                acc_err="Usa minuscole, cifre, - o _, iniziando con una lettera.", pw="Crea la password dell'utente {user}", pw_err="Scegli una password.",
@@ -111,8 +113,8 @@ TEXT = {
                wifi_err="Scegli una rete, o Nessun Wi-Fi.", wpw="Password di {}", wpw_ph="Password Wi-Fi",
                apply="Configurazione del tuo SmartPi", apply_sub="Il desktop si apre tra pochi secondi.",
                show="Mostra la password", by="di", failed="Configurazione non riuscita."),
-    "pt": dict(root="Crie a palavra-passe de root", root2="Repita a palavra-passe de root", name="O seu nome completo", keyboard="Teclado", lang_ph="Idioma do sistema: escreva para procurar", lang_err="Nenhum idioma corresponde. Escreva outro.", welcome="Bem-vindo", welcome_sub="Vamos configurar o seu SmartPi. Demora um minuto.", start="Começar",
-               go="Continuar", back="Voltar", step="Passo {} de {}", hint="Enter para continuar  ·  Esc para voltar",
+    "pt": dict(root="Crie a palavra-passe de root", root2="Repita a palavra-passe de root", name="O seu nome completo", autologin="Iniciar sessão automaticamente", yes="Sim", no="Não", keyboard="Teclado", lang_ph="Idioma do sistema: escreva para procurar", lang_err="Nenhum idioma corresponde. Escreva outro.", welcome="Bem-vindo", welcome_sub="Vamos configurar o seu SmartPi. Demora um minuto.", start="Começar",
+               go="Continuar", skip="Manter definições de fábrica", skip_title="Manter as definições de fábrica?", skip_user="Utilizador", skip_pw="Palavra-passe", skip_lang="Idioma *inglês*  ·  Fuso horário *UTC*", skip_auto="O ambiente de trabalho abre *sem palavra-passe*", skip_go="Manter estas definições", back="Voltar", step="Passo {} de {}", hint="Enter para continuar  ·  Esc para voltar",
                hint_kbd="Prima Enter para continuar  ·  Esc para voltar", zone_ph="Fuso horário: escreva uma cidade, ex. Lisboa",
                zone_err="Nenhum fuso corresponde. Escreva outra cidade.", acc="Escolha um nome de utilizador", acc_help="Por exemplo o seu nome próprio. Minúsculas, algarismos, - e _, a começar por uma letra.",
                acc_err="Use minúsculas, algarismos, - ou _, a começar por uma letra.", pw="Crie a palavra-passe do utilizador {user}",
@@ -122,8 +124,8 @@ TEXT = {
                wifi_err="Escolha uma rede, ou Sem Wi-Fi.", wpw="Palavra-passe de {}", wpw_ph="Palavra-passe Wi-Fi",
                apply="A configurar o seu SmartPi", apply_sub="O ambiente de trabalho abre em segundos.",
                show="Mostrar a palavra-passe", by="por", failed="A configuração falhou."),
-    "zh": dict(root="创建 root 密码", root2="再次输入 root 密码", name="您的全名", keyboard="键盘", lang_ph="系统语言：输入以搜索", lang_err="没有匹配的语言，请输入其他语言。", welcome="欢迎", welcome_sub="让我们来设置您的 SmartPi，只需一分钟。", start="开始",
-               go="继续", back="返回", step="第 {} 步，共 {} 步", hint="按 Enter 继续  ·  按 Esc 返回",
+    "zh": dict(root="创建 root 密码", root2="再次输入 root 密码", name="您的全名", autologin="自动登录", yes="是", no="否", keyboard="键盘", lang_ph="系统语言：输入以搜索", lang_err="没有匹配的语言，请输入其他语言。", welcome="欢迎", welcome_sub="让我们来设置您的 SmartPi，只需一分钟。", start="开始",
+               go="继续", skip="保留出厂设置", skip_title="保留出厂设置？", skip_user="用户", skip_pw="密码", skip_lang="语言 *英语*  ·  时区 *UTC*", skip_auto="桌面*无需密码*直接打开", skip_go="保留这些设置", back="返回", step="第 {} 步，共 {} 步", hint="按 Enter 继续  ·  按 Esc 返回",
                hint_kbd="按 Enter 继续  ·  按 Esc 返回", zone_ph="时区：输入城市，例如 Shanghai",
                zone_err="没有匹配的时区，请输入其他城市。", acc="选择用户名", acc_help="例如您的名字。小写字母、数字、- 和 _，以字母开头。", acc_err="请使用小写字母、数字、- 或 _，并以字母开头。", pw="创建用户 {user} 的密码", pw_err="请设置密码。", pw2="再次输入用户 {user} 的密码", pw2_err="两次输入的密码不一致，请重新输入。",
                wifi="Wi-Fi", wifi_none="暂不使用 Wi-Fi",
@@ -137,9 +139,9 @@ RESERVED = {"root", "daemon", "bin", "sys", "sync", "games", "man", "lp", "mail"
             "www-data", "backup", "list", "irc", "nobody", "smartpi-setup", "lightdm", "messagebus"}
 
 # Frosted dark glass on the blurred wallpaper, Yumi yellow for the brand and the one action.
-CSS = b"""
+CSS = b"@define-color yumi " + YELLOW.encode() + b""";
 window { background-color: #1d2230;
-         background-image: radial-gradient(circle farthest-side at 18% 28%, rgba(255,199,44,0.45), rgba(255,199,44,0)),
+         background-image: radial-gradient(circle farthest-side at 18% 28%, alpha(@yumi,0.45), alpha(@yumi,0)),
                            radial-gradient(circle farthest-side at 85% 18%, rgba(10,132,255,0.40), rgba(10,132,255,0)); }
 .card { background-color: rgba(24,24,28,0.62); border: 1px solid rgba(255,255,255,0.14);
         border-radius: 26px; padding: 34px 44px 26px 44px; }
@@ -147,6 +149,10 @@ window { background-color: #1d2230;
 .subtitle { font-size: 15px; color: rgba(255,255,255,0.72); }
 .hint, .step { font-size: 12px; color: rgba(255,255,255,0.50); }
 .help { font-size: 13px; color: rgba(255,255,255,0.58); }
+.option { font-size: 15px; color: rgba(255,255,255,0.85); }
+button.toggle { min-height: 34px; min-width: 76px; border-radius: 17px; background-image: none; border: none;
+                box-shadow: none; background-color: rgba(255,255,255,0.18); color: #ffffff; font-weight: 700; }
+button.toggle:checked { background-color: @yumi; color: #181818; }
 .ghost { font-size: 16px; color: rgba(255,255,255,0.40); }
 scrollbar, scrollbar trough { background: transparent; border: none; box-shadow: none; }
 scrollbar button { min-width: 0; min-height: 0; padding: 0; border: none; background: none; -gtk-icon-source: none; }
@@ -157,16 +163,16 @@ scrollbar slider:hover, scrollbar slider:active { background-color: rgba(255,255
 .error { font-size: 13px; color: #ff8a80; }
 entry { min-height: 42px; border-radius: 12px; padding: 0 14px; font-size: 16px;
         background-image: none; background-color: rgba(255,255,255,0.10);
-        border: 1px solid rgba(255,255,255,0.20); box-shadow: none; color: #ffffff; caret-color: #FFC72C; }
-entry:focus { border-color: #FFC72C; box-shadow: 0 0 0 3px rgba(255,199,44,0.28); }
+        border: 1px solid rgba(255,255,255,0.20); box-shadow: none; color: #ffffff; caret-color: @yumi; }
+entry:focus { border-color: @yumi; box-shadow: 0 0 0 3px alpha(@yumi,0.28); }
 scrolledwindow { border-radius: 14px; background-color: rgba(255,255,255,0.06); }
 list { background-color: transparent; }
 row { padding: 9px 14px; border-radius: 10px; color: #ffffff; font-size: 15px; }
-row:selected, row:focus { background-color: rgba(255,199,44,0.24); color: #ffffff; }
-button.go { min-height: 44px; border-radius: 22px; background-image: none; background-color: #FFC72C;
+row:selected, row:focus { background-color: alpha(@yumi,0.24); color: #ffffff; }
+button.go { min-height: 44px; border-radius: 22px; background-image: none; background-color: @yumi;
             color: #181818; font-weight: 700; font-size: 15px; border: none; box-shadow: none; }
 button.go:hover { background-color: #ffd24f; }
-button.go:disabled { background-color: rgba(255,199,44,0.45); box-shadow: none; }
+button.go:disabled { background-color: alpha(@yumi,0.45); box-shadow: none; }
 button.back { min-height: 44px; min-width: 96px; border-radius: 22px; background-image: none;
               background-color: rgba(255,255,255,0.12); color: #ffffff; font-weight: 600; font-size: 15px;
               border: 1px solid rgba(255,255,255,0.18); box-shadow: none; }
@@ -176,7 +182,7 @@ button.tab { background-image: none; background-color: rgba(24,24,28,0.62); bord
 button.tab:hover, button.tab:active { background-color: rgba(60,60,66,0.75); }
 .tab-label { font-size: 14px; font-weight: 600; color: #ffffff; }
 window.tabwin { background-image: none; background-color: #26262b; }
-spinner { color: #FFC72C; }
+spinner { color: @yumi; }
 """
 
 
@@ -225,6 +231,12 @@ def pixbuf(path, height):
         return GdkPixbuf.Pixbuf.new_from_file_at_scale(path, -1, height, True)
     except Exception:
         return None
+
+
+def emphasis(text):
+    """*value* in bold Yumi yellow, the rest as plain text."""
+    return re.sub(r"\*([^*]+)\*", lambda m: f'<span foreground="{YELLOW}" weight="bold">{m.group(1)}</span>',
+                  GLib.markup_escape_text(text))
 
 
 def label(text, cls, wrap=False, chars=46):
@@ -308,8 +320,6 @@ def osk_layout():
 class Wizard(Gtk.Window):
     def __init__(self):
         super().__init__(title="Yumi SmartPi")
-        # a screen plugged in late or re-plugged can leave the HDMI output without a mode (black screen)
-        subprocess.run(["xrandr", "--auto"], capture_output=True)
         # no blanking while the wizard waits for someone: installers keep the screen on
         subprocess.run(["xset", "s", "off", "-dpms"], capture_output=True)
         self.geo = geo = Gdk.Display.get_default().get_monitor(0).get_geometry()
@@ -322,7 +332,7 @@ class Wizard(Gtk.Window):
         self.set_decorated(False); self.move(geo.x, geo.y); self.set_default_size(geo.width, geo.height)
 
         self.data = {"lang": "en_US", "layout": "us", "locale": "en_US.UTF-8", "zone": "America/New_York",
-                     "root_password": "", "user": "", "password": "", "realname": "", "wifi": "", "wifi_password": ""}
+                     "root_password": "", "user": "", "password": "", "realname": "", "autologin": True, "wifi": "", "wifi_password": ""}
         self.t = TEXT["en"]
         self.texts = []          # (widget, key, kind) redone when the language changes
         self.osk = self.osk_open = None
@@ -367,7 +377,7 @@ class Wizard(Gtk.Window):
         self.error.set_no_show_all(True)
         buttons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         self.back = Gtk.Button(); self.back.get_style_context().add_class("back")
-        self.back.connect("clicked", lambda *_: self.previous())
+        self.back.connect("clicked", lambda *_: self.previous(skip=True))
         self.go = Gtk.Button(); self.go.get_style_context().add_class("go")
         self.go.connect("clicked", lambda *_: self.next())
         buttons.pack_start(self.back, False, False, 0); buttons.pack_start(self.go, True, True, 0)
@@ -406,6 +416,11 @@ class Wizard(Gtk.Window):
             widget.set_placeholder_text(text)
         elif kind == "tooltip":
             widget.set_icon_tooltip_text(Gtk.EntryIconPosition.SECONDARY, text)
+        elif kind == "markup":
+            widget.set_markup(emphasis(text))
+
+    def refresh_autologin(self):
+        self.autologin.set_label(self.t["yes" if self.autologin.get_active() else "no"])
 
     def set_language(self, lang_id):
         lid, _, layout, loc, zone, ui = LANG[lang_id]
@@ -416,6 +431,7 @@ class Wizard(Gtk.Window):
             self.t = TEXT[ui]
             for widget, key, kind in self.texts:
                 self.apply_text(widget, key, kind)
+            self.refresh_autologin()
             if hasattr(self, "current"):
                 self.refresh_controls()
 
@@ -509,7 +525,16 @@ class Wizard(Gtk.Window):
         self.pw2 = self.entry(None, secret=True)
         self.page("confirm", "pw2", None, self.pw2, focus=lambda: self.pw2.grab_focus(), check=self.check_pw2)
         self.realname = self.entry(None)
-        self.page("name", "name", None, self.realname, focus=self.focus_realname, check=self.check_realname)
+        # the last account question: a desktop that opens by itself (Armbian, Raspberry Pi OS), or the
+        # login screen asking for the password at each start
+        nbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14); nbox.pack_start(self.realname, False, False, 0)
+        row = Gtk.Box(spacing=14)
+        row.pack_start(self.tr(label("", "option"), "autologin"), False, False, 0)
+        self.autologin = Gtk.ToggleButton(active=True); self.autologin.get_style_context().add_class("toggle")
+        self.autologin.set_valign(Gtk.Align.CENTER)
+        self.autologin.connect("toggled", lambda *_: self.refresh_autologin()); self.refresh_autologin()
+        row.pack_start(self.autologin, False, False, 0); nbox.pack_start(row, False, False, 0)
+        self.page("name", "name", None, nbox, focus=self.focus_realname, check=self.check_realname)
 
         self.wifis, self.wifis_sw = listbox([])
         self.no_wifi = Gtk.ListBoxRow(); self.no_wifi.key = ""
@@ -527,6 +552,19 @@ class Wizard(Gtk.Window):
         self.spinner = Gtk.Spinner(); self.spinner.set_size_request(36, 36)
         done.pack_start(self.spinner, False, False, 0)
         self.page("apply", "apply", "apply_sub", done)
+        # Keep factory settings on the first page: the shipped settings, in the order of the steps,
+        # once confirmed (reached only from there)
+        kept = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16); kept.set_halign(Gtk.Align.CENTER)
+        kept.pack_start(self.tr(label("", "option"), "skip_lang", "markup"), False, False, 0)
+        table = Gtk.Grid(column_spacing=40, row_spacing=8); table.set_halign(Gtk.Align.CENTER)
+        table.attach(self.tr(label("", "help"), "skip_user"), 0, 0, 1, 1)
+        table.attach(self.tr(label("", "help"), "skip_pw"), 1, 0, 1, 1)
+        for row, (user, password) in enumerate((("root", SHIPPED[1]), SHIPPED), 1):
+            for col, value in enumerate((user, password)):
+                cell = label("", "option"); cell.set_markup(emphasis(f"*{value}*")); table.attach(cell, col, row, 1, 1)
+        kept.pack_start(table, False, False, 0)
+        kept.pack_start(self.tr(label("", "option"), "skip_auto", "markup"), False, False, 0)
+        self.page("skip", "skip_title", None, kept)
 
     # ---- checks: return an error text, or None to go on --------------------------------------------------
     def check_language(self):
@@ -568,6 +606,7 @@ class Wizard(Gtk.Window):
 
     def check_realname(self):
         self.data["realname"] = self.realname.get_text().strip() or self.data["user"].capitalize()
+        self.data["autologin"] = self.autologin.get_active()
 
     def check_pw1(self):
         if not self.pw1.get_text():
@@ -595,7 +634,7 @@ class Wizard(Gtk.Window):
             return self.has_wifi
         if name == "wifipw":
             return bool(self.data["wifi"])
-        return True
+        return name != "skip"
 
     def show_page(self, i, back=False):
         self.current = i
@@ -613,6 +652,11 @@ class Wizard(Gtk.Window):
     def next(self):
         if not hasattr(self, "current") or self.pages[self.current]["name"] == "apply":
             return
+        if self.pages[self.current]["name"] == "skip":
+            self.data = {"skip": True}
+            self.show_page(self.index("apply"))
+            self.spinner.start(); threading.Thread(target=self.apply, daemon=True).start()
+            return
         check = self.pages[self.current]["check"]
         err = check() if check else None
         self.say(err or "")
@@ -625,8 +669,15 @@ class Wizard(Gtk.Window):
         if self.pages[i]["name"] == "apply":
             self.spinner.start(); threading.Thread(target=self.apply, daemon=True).start()
 
-    def previous(self):
-        if 0 < self.current and self.pages[self.current]["name"] != "apply":
+    def index(self, name):
+        return next(i for i, p in enumerate(self.pages) if p["name"] == name)
+
+    def previous(self, skip=False):
+        if self.pages[self.current]["name"] == "skip":
+            self.show_page(0, back=True)
+        elif self.current == 0 and skip:
+            self.show_page(self.index("skip"))
+        elif 0 < self.current and self.pages[self.current]["name"] != "apply":
             i = self.current - 1
             while i > 0 and not self.visible(i):
                 i -= 1
@@ -652,14 +703,17 @@ class Wizard(Gtk.Window):
         if not hasattr(self, "current"):
             return
         last, first = self.pages[self.current]["name"] == "apply", self.current == 0
+        skip = self.pages[self.current]["name"] == "skip"
         mouse = self.has_mouse()
-        self.go.set_label(self.t["start"] if first else self.t["go"]); self.back.set_label(self.t["back"])
-        self.go.set_visible(not last and (mouse or first))
-        self.back.set_visible(not last and mouse and not first)
+        self.go.set_label(self.t["start"] if first else self.t["skip_go"] if skip else self.t["go"])
+        self.back.set_label(self.t["skip"] if first else self.t["back"])
+        self.go.set_visible(not last and (mouse or first or skip))
+        self.back.set_visible(not last and (mouse or first or skip))
         self.hint.set_text("" if first else self.t["hint"] if mouse else self.t["hint_kbd"])
-        self.hint.set_visible(not last and not first)
-        shown = [j for j in range(len(self.pages) - 1) if self.visible(j)]
-        self.step.set_text("" if last or first else self.t["step"].format(shown.index(self.current), len(shown) - 1))
+        self.hint.set_visible(not last and not first and not skip)
+        shown = [j for j, p in enumerate(self.pages) if self.visible(j) and p["name"] != "apply"]
+        self.step.set_text("" if last or first or skip else
+                           self.t["step"].format(shown.index(self.current), len(shown) - 1))
         if self.pages[self.current]["name"] == "wifipw":
             self.pages[self.current]["title"].set_text(self.t["wpw"].format(self.data["wifi"]))
 
@@ -902,7 +956,7 @@ class Wizard(Gtk.Window):
         self.spinner.stop()
         if code != 0:
             self.say(out[-300:] or self.t["failed"])
-            self.show_page(next(i for i, p in enumerate(self.pages) if p["name"] == "account"), back=True)
+            self.show_page(self.index("account"), back=True)
         return False
 
 

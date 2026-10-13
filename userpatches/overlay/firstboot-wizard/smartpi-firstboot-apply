@@ -3,13 +3,11 @@
 # sudo, in the order of Armbian's first login: the root password, the account
 # (the default pi account is renamed, so its groups and sudo carry over), its
 # password and real name; then keyboard, time zone, WiFi, and the desktop opens
-# on the new account. The shipped default password yumi is gone from both.
+# on the new account, or its login screen. The shipped default password yumi is
+# gone from both. Skipped on the first page, the shipped settings stay.
 import json, os, pwd, re, subprocess, sys
 
-d = json.load(sys.stdin)
-name, pw, root_pw = d["user"], d["password"], d["root_password"]
-if not re.match(r"^[a-z][a-z0-9_-]{0,31}$", name) or not pw or not root_pw:
-    sys.exit("invalid account name or empty password")
+SESSION = "/usr/local/sbin/smartpi-desktop-session"
 GROUPS = "sudo,users,adm,dialout,audio,video,plugdev,netdev,i2c,spi,gpio"
 
 
@@ -19,6 +17,24 @@ def sh(*cmd):
         sys.exit(f"{' '.join(cmd[:3])}: {r.stderr.strip()}")
 
 
+def open_desktop(mode):
+    """The wizard is done: lightdm restarts on the account's desktop ("desktop") or its login screen ("login")."""
+    sh(SESSION, mode)
+    subprocess.run(["systemd-run", "--no-block", "--on-active=3", "systemctl", "restart", "lightdm"])
+
+
+d = json.load(sys.stdin)
+if d.get("skip"):
+    # pi / yumi, root / yumi, English, UTC, and the desktop of pi opening by itself
+    open_desktop("desktop")
+    print("done")
+    sys.exit(0)
+name, pw, root_pw = d["user"], d["password"], d["root_password"]
+if not re.match(r"^[a-z][a-z0-9_-]{0,31}$", name) or not pw or not root_pw:
+    sys.exit("invalid account name or empty password")
+
+# from here on, a reset before the end opens the wizard again at the next start
+sh(SESSION, "pending")
 try:
     first = pwd.getpwuid(1000).pw_name
 except KeyError:
@@ -37,6 +53,8 @@ elif first != name:
 subprocess.run(["chpasswd"], input=f"{name}:{pw}\nroot:{root_pw}\n", text=True, check=True)
 if d.get("realname"):
     sh("usermod", "-c", d["realname"], name)
+# Debian's own files, not localectl: its systemd ships localed read-only, even for root
+# (systemd-localed-read-only.conf), and the choice was dropped without a word
 if d.get("locale"):
     # the image ships en_US only: build the chosen language once, then make it the system's
     loc = d["locale"]
@@ -47,23 +65,43 @@ if d.get("locale"):
             open("/etc/locale.gen", "w").write(gen.replace(f"# {loc} UTF-8", f"{loc} UTF-8"))
         elif f"{loc} UTF-8" not in gen:
             open("/etc/locale.gen", "a").write(f"{loc} UTF-8\n")
-        subprocess.run(["locale-gen"], capture_output=True)
-    subprocess.run(["localectl", "set-locale", f"LANG={loc}"])
+        sh("locale-gen")
+    # --reset: Armbian also sets LANGUAGE and LC_MESSAGES to en_US, which would keep the desktop in English
+    sh("update-locale", "--reset", f"LANG={loc}")
+    # the account's folders in that language (Bureau, Téléchargements...), or the desktop asks at the first
+    # login: what xdg-user-dirs-gtk-update offers, done here, the old English folders going if still empty
+    home, conf = pwd.getpwnam(name).pw_dir, pwd.getpwnam(name).pw_dir + "/.config/"
+    def dirs():
+        if not os.path.exists(conf + "user-dirs.dirs"):
+            return set()
+        return {l.split("=", 1)[1].strip().strip('"').replace("$HOME", home)
+                for l in open(conf + "user-dirs.dirs") if l.startswith("XDG_")}
+    before = dirs()
+    sh("runuser", "-u", name, "--", "env", f"LC_ALL={loc}", "xdg-user-dirs-update", "--force")
+    for old_dir in before - dirs():
+        try:
+            os.rmdir(old_dir)
+        except OSError:   # not empty: the files stay where they are
+            pass
+    open(conf + "user-dirs.locale", "w").write(loc.split(".")[0])
 if d.get("layout"):
+    # read by X at its next start (the restart below), through udev's 64-xorg-xkb.rules
     lay, _, variant = d["layout"].partition(":")
-    subprocess.run(["localectl", "set-x11-keymap", lay, "", variant])
+    kb = open("/etc/default/keyboard").read()
+    for key, value in (("XKBLAYOUT", lay), ("XKBVARIANT", variant)):
+        line = f'{key}="{value}"'
+        kb, n = re.subn(rf"^{key}=.*$", line, kb, flags=re.M)
+        if not n:
+            kb += line + "\n"
+    open("/etc/default/keyboard", "w").write(kb)
+    sh("udevadm", "trigger", "--subsystem-match=input", "--action=change")
 if d.get("zone"):
-    subprocess.run(["timedatectl", "set-timezone", d["zone"]])
+    sh("timedatectl", "set-timezone", d["zone"])
 wifi_note = ""
 if d.get("wifi"):
     r = subprocess.run(["nmcli", "device", "wifi", "connect", d["wifi"], "password", d.get("wifi_password", "")],
                        capture_output=True, text=True)
     wifi_note = "" if r.returncode == 0 else " (WiFi not joined: " + r.stderr.strip()[:120] + ")"
-# the desktop of the new account without a login prompt, with the session this image ships
-sh("/usr/local/sbin/smartpi-desktop-session", "desktop")
-# the wizard cannot run again: its sudo rule and its session go
-for f in ("/etc/sudoers.d/smartpi-setup", "/usr/share/xsessions/smartpi-setup.desktop"):
-    if os.path.exists(f):
-        os.remove(f)
-subprocess.run(["systemd-run", "--no-block", "--on-active=3", "systemctl", "restart", "lightdm"])
+# the desktop of the new account, without a login prompt unless asked for one
+open_desktop("desktop" if d.get("autologin", True) else "login")
 print("done" + wifi_note)
