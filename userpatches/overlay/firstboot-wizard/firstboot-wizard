@@ -759,6 +759,10 @@ class Wizard(Gtk.Window):
         self.osk_win.move(self.geo.x, kb_top)
         tw, th = self.tab.get_size()
         self.tab.move(self.geo.x + self.geo.width - tw - 24, kb_top - th - 10)
+        # no window manager keeps it above: once, after a boot, the button stayed hidden until it was
+        # tapped (not reproduced since), the card's window having likely been raised over it
+        if self.tab.get_window():
+            self.tab.get_window().raise_()
 
     def fold_keyboard(self, fold):
         """fold=True slides the on-screen keyboard down off the screen, False slides it back up; the button
