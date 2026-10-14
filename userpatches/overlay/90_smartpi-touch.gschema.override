@@ -1,0 +1,12 @@
+# On-screen keyboard: shown on the login and lock screen (slick-greeter reads
+# this from gsettings only, a line in slick-greeter.conf is ignored), and opened
+# by Onboard in the desktop when a text field is touched, which needs the
+# accessibility events of the applications.
+[x.dm.slick-greeter]
+onscreen-keyboard=true
+# the layout of the desktop's keyboard, with its row of digits: Small, the default,
+# hides them behind a one-shot 12? key, a pain for a password
+onscreen-keyboard-layout='/usr/share/onboard/layouts/Compact.onboard'
+
+[org.gnome.desktop.interface]
+toolkit-accessibility=true

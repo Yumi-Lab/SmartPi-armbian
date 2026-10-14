@@ -1,0 +1,12 @@
+[Unit]
+Description=SmartPi desktop: first-boot wizard or straight to the desktop
+After=cloud-init.service
+Before=display-manager.service
+ConditionPathExists=!/var/lib/smartpi/desktop-set
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/smartpi-desktop-session
+
+[Install]
+WantedBy=graphical.target

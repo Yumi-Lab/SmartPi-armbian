@@ -1,0 +1,4 @@
+# The on-screen keyboard opens by itself on a touched text field from the
+# accessibility events of the application; Chromium sends none for its pages
+# unless asked (GTK applications do once toolkit-accessibility is on).
+export CHROMIUM_FLAGS="$CHROMIUM_FLAGS --force-renderer-accessibility"

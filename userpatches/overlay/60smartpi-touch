@@ -1,0 +1,7 @@
+# GTK 3 reads a touchscreen as touch events, which the panel menus and the
+# double-click of the file manager and the desktop do not handle: a tap shows a
+# tooltip, a double tap opens nothing. Mouse events instead, as the X server
+# makes them from the touch, like every non-GTK application already gets.
+# Not for the first-boot wizard: it tells a touchscreen and a mouse apart to
+# show its buttons and its keyboard, which mouse events alone would hide.
+[ "$DESKTOP_SESSION" = smartpi-setup ] || export GDK_CORE_DEVICE_EVENTS=1

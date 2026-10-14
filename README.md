@@ -68,7 +68,7 @@ The SmartPad is a SmartPi One fitted with a 4.3" 800x480 HDMI touchscreen — it
 | **SoC** | Allwinner H3 quad-core |
 | **RAM** | 1GB |
 | **Display** | 4.3" 800x480 touchscreen (auto-detected, auto-rotated 180°) |
-| **Extras** | On-screen keyboard (Onboard, shown only when a touchscreen is detected) |
+| **Extras** | On-screen keyboard (Onboard): on the login and lock screen, and in the desktop as soon as a text field is touched |
 | **Variants** | Server / Desktop |
 
 ## Supported Distributions
@@ -187,14 +187,14 @@ Boards get unplugged rather than shut down, so the images are hardened in place,
 - `fsck.repair=yes` on the kernel command line: the initramfs repairs the root file system instead of stopping on "requires a manual fsck"; systemd-fsck does the same for the FAT boot partition.
 - `/boot` is mounted `nofail`: once the kernel is loaded, a damaged FAT partition does not block the boot.
 - The ext4 root is set to `data=ordered` and `errors=remount-ro` in its superblock. Armbian builds every root in `data=writeback`, where a file written just before a power cut can come back filled with stale blocks.
-- `panic=10` and the H3 hardware watchdog (16 s, pinged by systemd): a panic or a hang reboots the board instead of waiting forever.
+- `panic=10` and the H3 hardware watchdog (16 s, pinged by systemd from the start of the boot services): a panic or a hang reboots the board instead of waiting forever, while a slow boot from a slow drive is left to finish.
 - The systemd journal stays in RAM (`Storage=volatile`); Armbian would otherwise write it to the card continuously.
 
 `yumi-bootlog` writes one line per boot to `/var/lib/yumi/boot.log` and, only after a power cut or a repair, to `/boot/yumi-boot.log` on the FAT partition. From any PC, `grep -c UNCLEAN yumi-boot.log` on that partition tells how many times the board was cut, and `root_fsck=repaired` lines show what fsck had to fix. Before reflashing a card that no longer boots, run `fsck.ext4 -n` on its second partition from a Linux PC: repairable errors mean the software path applies; a card that reads back zeros or turns read-only is a card or power supply problem.
 
 ## Boot From a USB Stick or SSD
 
-The H3 boot ROM only starts from the SD card, so U-Boot always comes from it, but it then looks for the operating system on USB storage first, then on the card, then on the network (PXE, DHCP). Flash any SmartPi image on a USB stick or an SSD in a USB enclosure and plug it in: the board boots it, and the card's own system is left untouched. Unplug it and the card boots again. That gives:
+The H3 boot ROM only starts from the SD card, so U-Boot always comes from it, but it then looks for the operating system on USB storage first, then on the card; a USB keyboard, mouse or hub plugged in does not stop it, and with nothing bootable it says so on screen and tries again every 10 s. Flash any SmartPi image on a USB stick or an SSD in a USB enclosure and plug it in: the board boots it, and the card's own system is left untouched. Unplug it and the card boots again. That gives:
 
 - a system on an SSD, which takes writes and power cuts far better than a microSD, with the card only used to boot;
 - a rescue path when the card's system no longer boots while U-Boot, in an area nothing writes to, still does;
@@ -232,6 +232,13 @@ disabled, cloud-init replaces it. Network interfaces keep the classic names
 `eth0` / `wlan0` (`net.ifnames=0`), the ones Raspberry Pi Imager writes in
 `network-config`. On Debian 11 the root password keeps Armbian's default (`1234`,
 to change at the first login): its cloud-init is too old for the root setting.
+
+A desktop image flashed as-is opens a first-boot wizard on screen instead, usable
+with a keyboard or a finger: the language and time zone, the root password, the
+user name, its password and real name in the order of Armbian's first login, then
+WiFi. A switch on the last account page chooses between a desktop that opens by
+itself and a login screen asking for the password. A card customized with
+Raspberry Pi Imager skips the wizard.
 
 ## Raspberry Pi Imager
 

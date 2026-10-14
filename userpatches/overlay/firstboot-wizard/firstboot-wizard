@@ -1,0 +1,964 @@
+#!/usr/bin/python3
+# Yumi SmartPi desktop first boot: a step-by-step assistant that creates the user
+# account, then opens the desktop on it. Keyboard first (one question per step,
+# Enter goes on, Esc goes back), mouse and touch screen too (Continue / Back
+# buttons, on-screen keyboard). Picking a language switches the assistant and the
+# keyboard layout at once. Runs alone in its own LightDM session (no window
+# manager), started by smartpi-desktop-session when the card was flashed as-is.
+import glob, json, math, os, re, shutil, subprocess, threading, unicodedata
+import cairo
+import gi
+gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
+gi.require_version("GdkPixbuf", "2.0")
+gi.require_version("GdkX11", "3.0")
+from gi.repository import Gdk, GdkPixbuf, GdkX11, Gio, Gtk, GLib
+
+ASSETS = "/usr/share/smartpi/firstboot"
+YELLOW = "#FFC72C"   # Yumi yellow: the brand, the one action, the values to note
+SHIPPED = ("pi", "yumi")   # the account and password of a card flashed as-is (also root's password)
+
+# id, name shown, keyboard layout[:variant], locale, time zone, wizard language
+LANGUAGES = [
+    ("en_US", "English (US)", "us", "en_US.UTF-8", "America/New_York", "en"),
+    ("en_GB", "English (UK)", "gb", "en_GB.UTF-8", "Europe/London", "en"),
+    ("fr_FR", "Français", "fr", "fr_FR.UTF-8", "Europe/Paris", "fr"),
+    ("fr_BE", "Français (Belgique)", "be", "fr_BE.UTF-8", "Europe/Brussels", "fr"),
+    ("fr_CH", "Français (Suisse)", "ch:fr", "fr_CH.UTF-8", "Europe/Zurich", "fr"),
+    ("de_DE", "Deutsch", "de", "de_DE.UTF-8", "Europe/Berlin", "de"),
+    ("de_CH", "Deutsch (Schweiz)", "ch", "de_CH.UTF-8", "Europe/Zurich", "de"),
+    ("es_ES", "Español", "es", "es_ES.UTF-8", "Europe/Madrid", "es"),
+    ("it_IT", "Italiano", "it", "it_IT.UTF-8", "Europe/Rome", "it"),
+    ("pt_PT", "Português", "pt", "pt_PT.UTF-8", "Europe/Lisbon", "pt"),
+    ("zh_CN", "中文（简体）", "us", "zh_CN.UTF-8", "Asia/Shanghai", "zh"),
+]
+LANG = {l[0]: l for l in LANGUAGES}
+# also found by these words in the language search (English and French names, country)
+SEARCH = {"en_US": "english anglais united states usa america", "en_GB": "english anglais united kingdom uk britain",
+          "fr_FR": "french francais france", "fr_BE": "french francais belgium belgique",
+          "fr_CH": "french francais switzerland suisse", "de_DE": "german allemand germany allemagne",
+          "de_CH": "german allemand switzerland suisse schweiz", "es_ES": "spanish espagnol spain espagne",
+          "it_IT": "italian italien italy italie", "pt_PT": "portuguese portugais portugal",
+          "zh_CN": "chinese chinois china chine zhongwen mandarin"}
+
+
+def plain(s):
+    """lowercase without accents, so "fra", "Fra" and "fra" all find "Français"."""
+    return "".join(c for c in unicodedata.normalize("NFD", s.lower()) if unicodedata.category(c) != "Mn")
+
+
+def matcher(query):
+    """Search box text -> test on a string. Every word typed must be found, in any order ("eur pa" finds
+    Europe/Paris, "fr sui" Français (Suisse)); each word is a regular expression when it is one (^ber,
+    paris|lyon), plain text otherwise; case and accents ignored."""
+    words = []
+    for w in plain(query).split():
+        try:
+            words.append(re.compile(w))
+        except re.error:
+            words.append(re.compile(re.escape(w)))
+    return lambda s: all(rx.search(plain(s)) for rx in words)
+
+TEXT = {
+    "en": dict(root="Create root password", root2="Repeat root password", name="Your real name", autologin="Log in automatically", yes="Yes", no="No", keyboard="Keyboard", lang_ph="System language: type to search", lang_err="No language matches. Type another one.", welcome="Welcome", welcome_sub="Let's set up your SmartPi. It takes a minute.", start="Start",
+               go="Continue", skip="Keep factory settings", skip_title="Keep the factory settings?", skip_user="User", skip_pw="Password", skip_lang="Language *English*  ·  Time zone *UTC*", skip_auto="The desktop opens *without a password*", skip_go="Keep these settings", back="Back", step="Step {} of {}", hint="Enter to continue  ·  Esc to go back",
+               hint_kbd="Press Enter to continue  ·  Esc to go back", zone_ph="Time zone: type a city, e.g. Paris",
+               zone_err="No time zone matches. Type another city.", acc="Choose a username", acc_help="For example your first name. Lowercase letters, digits, - and _, starting with a letter.",
+               acc_err="Use lowercase letters, digits, - or _, starting with a letter.", pw="Create the password for user {user}", pw_err="Choose a password.",
+               pw2="Repeat the password for user {user}",
+               pw2_err="The two passwords differ. Type it again.", wifi="WiFi", wifi_none="No WiFi for now",
+               wifi_again="Search again", wifi_searching="Searching for networks…",
+               wifi_err="Pick a network, or No WiFi for now.", wpw="Password for {}", wpw_ph="WiFi password",
+               apply="Setting up your SmartPi", apply_sub="Your desktop opens in a few seconds.",
+               show="Show the password", by="by", failed="Setup failed."),
+    "fr": dict(root="Créez le mot de passe root", root2="Répétez le mot de passe root", name="Votre nom complet", autologin="Ouvrir la session automatiquement", yes="Oui", no="Non", keyboard="Clavier", lang_ph="Langue du système : tapez pour chercher", lang_err="Aucune langue ne correspond. Essayez-en une autre.", welcome="Bienvenue", welcome_sub="Configurons votre SmartPi. Cela prend une minute.", start="Commencer",
+               go="Continuer", skip="Garder les réglages d'usine", skip_title="Garder les réglages d'usine ?", skip_user="Utilisateur", skip_pw="Mot de passe", skip_lang="Langue *anglais*  ·  Fuseau *UTC*", skip_auto="Le bureau s'ouvre *sans mot de passe*", skip_go="Garder ces réglages", back="Retour", step="Étape {} sur {}", hint="Entrée pour continuer  ·  Échap pour revenir",
+               hint_kbd="Appuyez sur Entrée pour continuer  ·  Échap pour revenir", zone_ph="Fuseau horaire : tapez une ville, par ex. Paris",
+               zone_err="Aucun fuseau ne correspond. Tapez une autre ville.", acc="Choisissez un nom d'utilisateur", acc_help="Par exemple votre prénom. Minuscules, chiffres, - et _, en commençant par une lettre.",
+               acc_err="Minuscules, chiffres, - ou _, en commençant par une lettre.", pw="Créez le mot de passe de l'utilisateur {user}",
+               pw_err="Choisissez un mot de passe.", pw2="Répétez le mot de passe de l'utilisateur {user}", pw2_err="Les deux mots de passe diffèrent. Recommencez.", wifi="Wi-Fi", wifi_none="Pas de Wi-Fi pour l'instant",
+               wifi_again="Rechercher à nouveau", wifi_searching="Recherche des réseaux…",
+               wifi_err="Choisissez un réseau, ou Pas de Wi-Fi.", wpw="Mot de passe de {}", wpw_ph="Mot de passe Wi-Fi",
+               apply="Configuration de votre SmartPi", apply_sub="Votre bureau s'ouvre dans quelques secondes.",
+               show="Afficher le mot de passe", by="par", failed="La configuration a échoué."),
+    "de": dict(root="Root-Passwort erstellen", root2="Root-Passwort wiederholen", name="Ihr vollständiger Name", autologin="Automatisch anmelden", yes="Ja", no="Nein", keyboard="Tastatur", lang_ph="Systemsprache: zum Suchen tippen", lang_err="Keine Sprache gefunden. Andere eingeben.", welcome="Willkommen", welcome_sub="Richten wir Ihren SmartPi ein. Das dauert eine Minute.", start="Los geht's",
+               go="Weiter", skip="Werkseinstellungen behalten", skip_title="Werkseinstellungen behalten?", skip_user="Benutzer", skip_pw="Passwort", skip_lang="Sprache *Englisch*  ·  Zeitzone *UTC*", skip_auto="Der Desktop öffnet sich *ohne Passwort*", skip_go="Diese Einstellungen behalten", back="Zurück", step="Schritt {} von {}", hint="Enter zum Fortfahren  ·  Esc für zurück",
+               hint_kbd="Drücken Sie Enter zum Fortfahren  ·  Esc für zurück", zone_ph="Zeitzone: Stadt eingeben, z. B. Berlin",
+               zone_err="Keine Zeitzone gefunden. Andere Stadt eingeben.", acc="Benutzernamen wählen", acc_help="Zum Beispiel Ihr Vorname. Kleinbuchstaben, Ziffern, - und _, beginnend mit einem Buchstaben.",
+               acc_err="Kleinbuchstaben, Ziffern, - oder _, beginnend mit einem Buchstaben.", pw="Passwort für Benutzer {user} erstellen", pw_err="Wählen Sie ein Passwort.",
+               pw2="Passwort für Benutzer {user} wiederholen",
+               pw2_err="Die Passwörter stimmen nicht überein. Bitte erneut eingeben.", wifi="WLAN", wifi_none="Vorerst kein WLAN",
+               wifi_again="Erneut suchen", wifi_searching="Suche nach Netzwerken…",
+               wifi_err="Wählen Sie ein Netzwerk oder Kein WLAN.", wpw="Passwort für {}", wpw_ph="WLAN-Passwort",
+               apply="Ihr SmartPi wird eingerichtet", apply_sub="Ihr Desktop öffnet sich in wenigen Sekunden.",
+               show="Passwort anzeigen", by="von", failed="Einrichtung fehlgeschlagen."),
+    "es": dict(root="Crea la contraseña de root", root2="Repite la contraseña de root", name="Tu nombre completo", autologin="Iniciar sesión automáticamente", yes="Sí", no="No", keyboard="Teclado", lang_ph="Idioma del sistema: escribe para buscar", lang_err="Ningún idioma coincide. Escribe otro.", welcome="Bienvenido", welcome_sub="Configuremos tu SmartPi. Solo lleva un minuto.", start="Empezar",
+               go="Continuar", skip="Mantener ajustes de fábrica", skip_title="¿Mantener los ajustes de fábrica?", skip_user="Usuario", skip_pw="Contraseña", skip_lang="Idioma *inglés*  ·  Zona horaria *UTC*", skip_auto="El escritorio se abre *sin contraseña*", skip_go="Mantener estos ajustes", back="Atrás", step="Paso {} de {}", hint="Intro para continuar  ·  Esc para volver",
+               hint_kbd="Pulsa Intro para continuar  ·  Esc para volver", zone_ph="Zona horaria: escribe una ciudad, p. ej. Madrid",
+               zone_err="Ninguna zona coincide. Escribe otra ciudad.", acc="Elige un nombre de usuario", acc_help="Por ejemplo tu nombre. Minúsculas, cifras, - y _, empezando por una letra.",
+               acc_err="Usa minúsculas, cifras, - o _, empezando por una letra.", pw="Crea la contraseña del usuario {user}", pw_err="Elige una contraseña.",
+               pw2="Repite la contraseña del usuario {user}",
+               pw2_err="Las contraseñas no coinciden. Escríbela otra vez.", wifi="Wi-Fi", wifi_none="Sin Wi-Fi por ahora", wifi_again="Buscar de nuevo",
+               wifi_searching="Buscando redes…", wifi_err="Elige una red, o Sin Wi-Fi.", wpw="Contraseña de {}",
+               wpw_ph="Contraseña Wi-Fi", apply="Configurando tu SmartPi", apply_sub="Tu escritorio se abre en unos segundos.",
+               show="Mostrar la contraseña", by="por", failed="La configuración falló."),
+    "it": dict(root="Crea la password di root", root2="Ripeti la password di root", name="Il tuo nome completo", autologin="Accedi automaticamente", yes="Sì", no="No", keyboard="Tastiera", lang_ph="Lingua del sistema: scrivi per cercare", lang_err="Nessuna lingua corrisponde. Scrivine un'altra.", welcome="Benvenuto", welcome_sub="Configuriamo il tuo SmartPi. Ci vuole un minuto.", start="Inizia",
+               go="Continua", skip="Mantieni impostazioni di fabbrica", skip_title="Mantenere le impostazioni di fabbrica?", skip_user="Utente", skip_pw="Password", skip_lang="Lingua *inglese*  ·  Fuso orario *UTC*", skip_auto="Il desktop si apre *senza password*", skip_go="Mantieni queste impostazioni", back="Indietro", step="Passo {} di {}", hint="Invio per continuare  ·  Esc per tornare",
+               hint_kbd="Premi Invio per continuare  ·  Esc per tornare", zone_ph="Fuso orario: scrivi una città, es. Roma",
+               zone_err="Nessun fuso corrisponde. Scrivi un'altra città.", acc="Scegli un nome utente", acc_help="Ad esempio il tuo nome. Minuscole, cifre, - e _, iniziando con una lettera.",
+               acc_err="Usa minuscole, cifre, - o _, iniziando con una lettera.", pw="Crea la password dell'utente {user}", pw_err="Scegli una password.",
+               pw2="Ripeti la password dell'utente {user}",
+               pw2_err="Le password sono diverse. Riscrivila.", wifi="Wi-Fi", wifi_none="Nessun Wi-Fi per ora",
+               wifi_again="Cerca di nuovo", wifi_searching="Ricerca delle reti…",
+               wifi_err="Scegli una rete, o Nessun Wi-Fi.", wpw="Password di {}", wpw_ph="Password Wi-Fi",
+               apply="Configurazione del tuo SmartPi", apply_sub="Il desktop si apre tra pochi secondi.",
+               show="Mostra la password", by="di", failed="Configurazione non riuscita."),
+    "pt": dict(root="Crie a palavra-passe de root", root2="Repita a palavra-passe de root", name="O seu nome completo", autologin="Iniciar sessão automaticamente", yes="Sim", no="Não", keyboard="Teclado", lang_ph="Idioma do sistema: escreva para procurar", lang_err="Nenhum idioma corresponde. Escreva outro.", welcome="Bem-vindo", welcome_sub="Vamos configurar o seu SmartPi. Demora um minuto.", start="Começar",
+               go="Continuar", skip="Manter definições de fábrica", skip_title="Manter as definições de fábrica?", skip_user="Utilizador", skip_pw="Palavra-passe", skip_lang="Idioma *inglês*  ·  Fuso horário *UTC*", skip_auto="O ambiente de trabalho abre *sem palavra-passe*", skip_go="Manter estas definições", back="Voltar", step="Passo {} de {}", hint="Enter para continuar  ·  Esc para voltar",
+               hint_kbd="Prima Enter para continuar  ·  Esc para voltar", zone_ph="Fuso horário: escreva uma cidade, ex. Lisboa",
+               zone_err="Nenhum fuso corresponde. Escreva outra cidade.", acc="Escolha um nome de utilizador", acc_help="Por exemplo o seu nome próprio. Minúsculas, algarismos, - e _, a começar por uma letra.",
+               acc_err="Use minúsculas, algarismos, - ou _, a começar por uma letra.", pw="Crie a palavra-passe do utilizador {user}",
+               pw_err="Escolha uma palavra-passe.", pw2="Repita a palavra-passe do utilizador {user}", pw2_err="As palavras-passe são diferentes. Escreva outra vez.",
+               wifi="Wi-Fi", wifi_none="Sem Wi-Fi por agora",
+               wifi_again="Procurar de novo", wifi_searching="A procurar redes…",
+               wifi_err="Escolha uma rede, ou Sem Wi-Fi.", wpw="Palavra-passe de {}", wpw_ph="Palavra-passe Wi-Fi",
+               apply="A configurar o seu SmartPi", apply_sub="O ambiente de trabalho abre em segundos.",
+               show="Mostrar a palavra-passe", by="por", failed="A configuração falhou."),
+    "zh": dict(root="创建 root 密码", root2="再次输入 root 密码", name="您的全名", autologin="自动登录", yes="是", no="否", keyboard="键盘", lang_ph="系统语言：输入以搜索", lang_err="没有匹配的语言，请输入其他语言。", welcome="欢迎", welcome_sub="让我们来设置您的 SmartPi，只需一分钟。", start="开始",
+               go="继续", skip="保留出厂设置", skip_title="保留出厂设置？", skip_user="用户", skip_pw="密码", skip_lang="语言 *英语*  ·  时区 *UTC*", skip_auto="桌面*无需密码*直接打开", skip_go="保留这些设置", back="返回", step="第 {} 步，共 {} 步", hint="按 Enter 继续  ·  按 Esc 返回",
+               hint_kbd="按 Enter 继续  ·  按 Esc 返回", zone_ph="时区：输入城市，例如 Shanghai",
+               zone_err="没有匹配的时区，请输入其他城市。", acc="选择用户名", acc_help="例如您的名字。小写字母、数字、- 和 _，以字母开头。", acc_err="请使用小写字母、数字、- 或 _，并以字母开头。", pw="创建用户 {user} 的密码", pw_err="请设置密码。", pw2="再次输入用户 {user} 的密码", pw2_err="两次输入的密码不一致，请重新输入。",
+               wifi="Wi-Fi", wifi_none="暂不使用 Wi-Fi",
+               wifi_again="重新搜索", wifi_searching="正在搜索网络…", wifi_err="请选择网络，或暂不使用 Wi-Fi。",
+               wpw="{} 的密码", wpw_ph="Wi-Fi 密码", apply="正在设置您的 SmartPi", apply_sub="几秒钟后将打开桌面。",
+               show="显示密码", by="由", failed="设置失败。"),
+}
+
+NAME = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
+RESERVED = {"root", "daemon", "bin", "sys", "sync", "games", "man", "lp", "mail", "news", "uucp", "proxy",
+            "www-data", "backup", "list", "irc", "nobody", "smartpi-setup", "lightdm", "messagebus"}
+
+# Frosted dark glass on the blurred wallpaper, Yumi yellow for the brand and the one action.
+CSS = b"@define-color yumi " + YELLOW.encode() + b""";
+window { background-color: #1d2230;
+         background-image: radial-gradient(circle farthest-side at 18% 28%, alpha(@yumi,0.45), alpha(@yumi,0)),
+                           radial-gradient(circle farthest-side at 85% 18%, rgba(10,132,255,0.40), rgba(10,132,255,0)); }
+.card { background-color: rgba(24,24,28,0.62); border: 1px solid rgba(255,255,255,0.14);
+        border-radius: 26px; padding: 34px 44px 26px 44px; }
+.title { font-size: 26px; font-weight: 600; color: #ffffff; }
+.subtitle { font-size: 15px; color: rgba(255,255,255,0.72); }
+.hint, .step { font-size: 12px; color: rgba(255,255,255,0.50); }
+.help { font-size: 13px; color: rgba(255,255,255,0.58); }
+.option { font-size: 15px; color: rgba(255,255,255,0.85); }
+button.toggle { min-height: 34px; min-width: 76px; border-radius: 17px; background-image: none; border: none;
+                box-shadow: none; background-color: rgba(255,255,255,0.18); color: #ffffff; font-weight: 700; }
+button.toggle:checked { background-color: @yumi; color: #181818; }
+.ghost { font-size: 16px; color: rgba(255,255,255,0.40); }
+scrollbar, scrollbar trough { background: transparent; border: none; box-shadow: none; }
+scrollbar button { min-width: 0; min-height: 0; padding: 0; border: none; background: none; -gtk-icon-source: none; }
+scrollbar slider { min-width: 6px; min-height: 28px; margin: 3px; border: none; border-radius: 3px;
+                   background-color: rgba(255,255,255,0.32); }
+scrollbar slider:hover, scrollbar slider:active { background-color: rgba(255,255,255,0.55); }
+.by { font-size: 13px; color: rgba(255,255,255,0.60); }
+.error { font-size: 13px; color: #ff8a80; }
+entry { min-height: 42px; border-radius: 12px; padding: 0 14px; font-size: 16px;
+        background-image: none; background-color: rgba(255,255,255,0.10);
+        border: 1px solid rgba(255,255,255,0.20); box-shadow: none; color: #ffffff; caret-color: @yumi; }
+entry:focus { border-color: @yumi; box-shadow: 0 0 0 3px alpha(@yumi,0.28); }
+scrolledwindow { border-radius: 14px; background-color: rgba(255,255,255,0.06); }
+list { background-color: transparent; }
+row { padding: 9px 14px; border-radius: 10px; color: #ffffff; font-size: 15px; }
+row:selected, row:focus { background-color: alpha(@yumi,0.24); color: #ffffff; }
+button.go { min-height: 44px; border-radius: 22px; background-image: none; background-color: @yumi;
+            color: #181818; font-weight: 700; font-size: 15px; border: none; box-shadow: none; }
+button.go:hover { background-color: #ffd24f; }
+button.go:disabled { background-color: alpha(@yumi,0.45); box-shadow: none; }
+button.back { min-height: 44px; min-width: 96px; border-radius: 22px; background-image: none;
+              background-color: rgba(255,255,255,0.12); color: #ffffff; font-weight: 600; font-size: 15px;
+              border: 1px solid rgba(255,255,255,0.18); box-shadow: none; }
+button.back:hover { background-color: rgba(255,255,255,0.20); }
+button.tab { background-image: none; background-color: rgba(24,24,28,0.62); border: 1px solid rgba(255,255,255,0.16);
+             border-radius: 32px; box-shadow: none; padding: 14px 26px; min-height: 36px; min-width: 150px; }
+button.tab:hover, button.tab:active { background-color: rgba(60,60,66,0.75); }
+.tab-label { font-size: 14px; font-weight: 600; color: #ffffff; }
+window.tabwin { background-image: none; background-color: #26262b; }
+spinner { color: @yumi; }
+"""
+
+
+def run(*cmd):
+    return subprocess.run(cmd, capture_output=True, text=True).stdout
+
+
+def backdrop(width, height):
+    """Screen-sized blurred wallpaper of this image as a PNG path, or None (the CSS gradient stays)."""
+    blurred = None
+    for conf in ("/etc/lightdm/slick-greeter.conf", "/etc/lightdm/lightdm-gtk-greeter.conf"):
+        try:
+            m = re.search(r"^background\s*=\s*(\S+)", open(conf).read(), re.M)
+        except OSError:
+            continue
+        if m and m.group(1).startswith("/"):
+            blurred = m.group(1); break
+    try:
+        if blurred:
+            pix = GdkPixbuf.Pixbuf.new_from_file_at_scale(blurred, width, height, False)
+        else:
+            src = sorted(glob.glob("/usr/share/backgrounds/armbian/*"))[0]
+            small = GdkPixbuf.Pixbuf.new_from_file_at_scale(src, 48, 27, False)   # shrink then enlarge = blur
+            pix = small.scale_simple(width, height, GdkPixbuf.InterpType.BILINEAR)
+        out = "/tmp/smartpi-firstboot-backdrop.png"
+        pix.savev(out, "png", [], [])
+        return out
+    except Exception:
+        return None
+
+
+def board_wordmark():
+    """Wordmark of the board this runs on, from its device tree: "yumi,smartpi-one" -> smartpi-one.svg,
+    "yumi,smartpi-4" -> smartpi-4.svg (assets copied from the yumi-brand wordmarks, dark variant). None if unknown."""
+    try:
+        first = open("/proc/device-tree/compatible").read().split("\0")[0]
+    except OSError:
+        return None
+    m = re.match(r"yumi,(smartpi-[a-z0-9]+)$", first)
+    path = f"{ASSETS}/{m.group(1)}.svg" if m else None
+    return path if path and os.path.exists(path) else None
+
+
+def pixbuf(path, height):
+    try:
+        return GdkPixbuf.Pixbuf.new_from_file_at_scale(path, -1, height, True)
+    except Exception:
+        return None
+
+
+def emphasis(text):
+    """*value* in bold Yumi yellow, the rest as plain text."""
+    return re.sub(r"\*([^*]+)\*", lambda m: f'<span foreground="{YELLOW}" weight="bold">{m.group(1)}</span>',
+                  GLib.markup_escape_text(text))
+
+
+def label(text, cls, wrap=False, chars=46):
+    l = Gtk.Label(label=text, xalign=0.5); l.get_style_context().add_class(cls)
+    l.set_line_wrap(wrap); l.set_justify(Gtk.Justification.CENTER)
+    if wrap:
+        l.set_max_width_chars(chars)
+    return l
+
+
+def listbox(items):
+    """A keyboard-friendly list: arrows to move, Enter or a double tap to go on; a tap only selects."""
+    box = Gtk.ListBox(); box.set_selection_mode(Gtk.SelectionMode.BROWSE); box.set_activate_on_single_click(False)
+    for key, text in items:
+        row = Gtk.ListBoxRow(); row.key = key
+        row.add(Gtk.Label(label=text, xalign=0)); box.add(row)
+    sw = Gtk.ScrolledWindow(); sw.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC); sw.add(box)
+    sw.set_overlay_scrolling(False)   # a scrollbar always shown says "this list scrolls"
+    return box, sw
+
+
+def select(box, key):
+    for row in box.get_children():
+        if row.key == key:
+            box.select_row(row); row.grab_focus(); return
+
+
+def first_visible(box):
+    """After a search: select the first row still shown, so Enter takes it."""
+    for row in box.get_children():
+        if row.get_child_visible():
+            box.select_row(row); return
+
+
+def osk_theme():
+    """onboard's Nightshade theme with opaque pages: its 123 and symbols pages were 90 % opaque and showed the
+    letters through. Written to the session user's own theme folder, where onboard looks for themes."""
+    home = os.path.expanduser("~/.local/share/onboard/themes")
+    src = "/usr/share/onboard/themes"
+    try:
+        os.makedirs(home, exist_ok=True)
+        colors = open(f"{src}/Charcoal.colors").read().replace('name="Charcoal"', 'name="SmartPi"')
+        colors = re.sub(r'(<layer>\s*<color element="background" rgb="#[0-9a-fA-F]+" opacity=")[0-9.]+"', r'\g<1>1.0"', colors)
+        open(f"{home}/SmartPi.colors", "w").write(colors)
+        theme = open(f"{src}/Nightshade.theme").read().replace('name="Nightshade"', 'name="SmartPi"')
+        theme = theme.replace("<color_scheme>Charcoal</color_scheme>", "<color_scheme>SmartPi</color_scheme>")
+        open(f"{home}/SmartPi.theme", "w").write(theme)
+        return f"{home}/SmartPi.theme"
+    except OSError:
+        return None
+
+
+def osk_layout():
+    """onboard's Compact layout, built in /tmp from the installed one: Esc in place of the top-left key; letters
+    and 123 pages only; without the hide/move keys and the mouse helpers (middle, right, double, drag, hover click)."""
+    src, dst = "/usr/share/onboard/layouts", "/tmp/smartpi-osk"
+    try:
+        shutil.rmtree(dst, ignore_errors=True); shutil.copytree(src, dst)
+        lay = open(f"{dst}/Compact.onboard").read()
+        svg = open(f"{dst}/Compact-Alpha.svg").read()
+        if lay.count('<key group="alphanumeric" id="TLDE"/>') != 1 or svg.count('id="TLDE"') != 1:
+            return "Compact"
+        lay = lay.replace('<key group="alphanumeric" id="TLDE"/>', '<key group="bottomrow" id="ESC"/>')
+        lay = re.sub(r"""\s*<key group=["'](?:bottomrow|sidebar)["'] id=["'](?:hide|move|showclick|layer2)["'][^>]*/>""", "", lay)
+        lay = re.sub(r'\s*<box orientation="horizontal" expand="false">\s*</box>', "", lay)
+        lay = lay.replace('id="layer0" show_active="false"', 'id="layer0"')          # Abc shows as selected too
+        lay = lay.replace("id='layer0' show_active=\"false\"", "id='layer0'")
+        # 123 stays up after a key (arrows, digits) until Abc is pressed; onboard drops back to letters otherwise
+        def stay(m):
+            return re.sub(r"<key (?![^>]*unlatch_layer)", "<key unlatch_layer=\"false\" ", m.group(0))
+        lay = re.sub(r'<panel layer="numbers".*?</panel>', stay, lay, flags=re.S)
+        lay = re.sub(r'\s*<panel layer="utils".*?</panel>', "", lay, flags=re.S)        # 16 empty snippets, quit, settings
+        lay = re.sub(r'\s*<panel id="click".*?</panel>', "", lay, flags=re.S)
+        open(f"{dst}/Compact.onboard", "w").write(lay)
+        open(f"{dst}/Compact-Alpha.svg", "w").write(svg.replace('id="TLDE"', 'id="ESC"'))
+        return f"{dst}/Compact.onboard"
+    except OSError:
+        return "Compact"
+
+
+class Wizard(Gtk.Window):
+    def __init__(self):
+        super().__init__(title="Yumi SmartPi")
+        # no blanking while the wizard waits for someone: installers keep the screen on
+        subprocess.run(["xset", "s", "off", "-dpms"], capture_output=True)
+        self.geo = geo = Gdk.Display.get_default().get_monitor(0).get_geometry()
+        css, bg = CSS, backdrop(geo.width, geo.height)
+        if bg:
+            css += b'window { background-image: url("file://' + bg.encode() + b'"); background-size: cover; }'
+        style = Gtk.CssProvider(); style.load_from_data(css)
+        Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(), style, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        # No window manager in this session: cover the screen ourselves (fullscreen() needs one).
+        self.set_decorated(False); self.move(geo.x, geo.y); self.set_default_size(geo.width, geo.height)
+
+        self.data = {"lang": "en_US", "layout": "us", "locale": "en_US.UTF-8", "zone": "America/New_York",
+                     "root_password": "", "user": "", "password": "", "realname": "", "autologin": True, "wifi": "", "wifi_password": ""}
+        self.t = TEXT["en"]
+        self.texts = []          # (widget, key, kind) redone when the language changes
+        self.osk = self.osk_open = None
+        self.has_wifi = "wifi" in run("nmcli", "-t", "-f", "TYPE", "device").split()
+        self.networks = []
+        if self.has_wifi:
+            threading.Thread(target=self.scan_wifi, daemon=True).start()
+
+        self.outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.outer.set_valign(Gtk.Align.CENTER); self.outer.set_halign(Gtk.Align.FILL)
+        self.card = card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        card.get_style_context().add_class("card")
+        self.set_card_width(460)
+        self.outer.add(card); self.add(self.outer)
+        self.tab = Gtk.Window(type=Gtk.WindowType.POPUP); self.tab.get_style_context().add_class("tabwin")
+        button = Gtk.Button(); button.get_style_context().add_class("tab")
+        tab_box = Gtk.Box(spacing=8); self.tab_icon = Gtk.Image()
+        tab_box.pack_start(self.tab_icon, False, False, 0)
+        tab_box.pack_start(self.tr(label("", "tab-label"), "keyboard"), False, False, 0)
+        button.add(tab_box); button.connect("clicked", lambda *_: self.fold_keyboard(self.osk_open))
+        self.tab.add(button); self.tab.connect("size-allocate", self.round_tab)
+
+        # board wordmark (SmartPi One, SmartPi 4...), and under it a small "by YUMi" signature
+        self.brand = brand = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6); brand.set_halign(Gtk.Align.CENTER)
+        self.wordmark = board_wordmark()
+        self.mark = Gtk.Image.new_from_pixbuf(pixbuf(self.wordmark, 64)) if self.wordmark else label("SmartPi", "title")
+        brand.pack_start(self.mark, False, False, 0)
+        by = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=7); by.set_halign(Gtk.Align.CENTER)
+        by.set_valign(Gtk.Align.CENTER)
+        self.by = by
+        by.pack_start(self.tr(label("", "by"), "by"), False, False, 0)
+        yumi = pixbuf(f"{ASSETS}/yumi.svg", 14)
+        if yumi:
+            img = Gtk.Image.new_from_pixbuf(yumi); img.set_valign(Gtk.Align.CENTER); by.pack_start(img, False, False, 0)
+        brand.pack_start(by, False, False, 0)
+        card.pack_start(brand, False, False, 4)
+
+        self.stack = Gtk.Stack(); self.stack.set_transition_type(Gtk.StackTransitionType.NONE)
+        self.stack.set_vhomogeneous(False)
+        card.pack_start(self.stack, True, True, 0)
+        self.error = label("", "error", wrap=True); card.pack_start(self.error, False, False, 0)
+        self.error.set_no_show_all(True)
+        buttons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        self.back = Gtk.Button(); self.back.get_style_context().add_class("back")
+        self.back.connect("clicked", lambda *_: self.previous(skip=True))
+        self.go = Gtk.Button(); self.go.get_style_context().add_class("go")
+        self.go.connect("clicked", lambda *_: self.next())
+        buttons.pack_start(self.back, False, False, 0); buttons.pack_start(self.go, True, True, 0)
+        card.pack_start(buttons, False, False, 2)
+        foot = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        self.step = label("", "step"); self.hint = label("", "hint", wrap=True, chars=52)
+        foot.pack_start(self.step, False, False, 0); foot.pack_end(self.hint, False, False, 0)
+        card.pack_start(foot, False, False, 0)
+
+        self.seat = Gdk.Display.get_default().get_default_seat()
+        self.seat.connect("device-added", lambda *_: self.refresh_controls())
+        self.seat.connect("device-removed", lambda *_: self.refresh_controls())
+        self.pages, self.heads = [], []
+        self.build()
+        self.set_compact(False)
+        self.connect("key-press-event", self.on_key)
+        self.connect("destroy", Gtk.main_quit)
+        self.connect("map-event", self.on_map)
+        self.pointer_shown = True
+        for w in (self, self.tab):
+            w.add_events(Gdk.EventMask.POINTER_MOTION_MASK | Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.TOUCH_MASK)
+            w.connect("event", self.on_pointer_event)
+        Gdk.Screen.get_default().connect("monitors-changed", self.on_monitors)
+
+    # ---- language ----------------------------------------------------------------------------------------
+    def tr(self, widget, key, kind="label"):
+        """Remember a widget whose text comes from TEXT[key], so a language change redoes it."""
+        self.texts.append((widget, key, kind)); self.apply_text(widget, key, kind)
+        return widget
+
+    def apply_text(self, widget, key, kind):
+        text = self.t[key].replace("{user}", self.data.get("user") or "")
+        if kind == "label":
+            widget.set_text(text)
+        elif kind == "placeholder":
+            widget.set_placeholder_text(text)
+        elif kind == "tooltip":
+            widget.set_icon_tooltip_text(Gtk.EntryIconPosition.SECONDARY, text)
+        elif kind == "markup":
+            widget.set_markup(emphasis(text))
+
+    def refresh_autologin(self):
+        self.autologin.set_label(self.t["yes" if self.autologin.get_active() else "no"])
+
+    def set_language(self, lang_id):
+        lid, _, layout, loc, zone, ui = LANG[lang_id]
+        self.data.update(lang=lid, layout=layout, locale=loc, zone=zone)
+        lay, _, variant = layout.partition(":")
+        subprocess.run(["setxkbmap", "-layout", lay] + (["-variant", variant] if variant else []))
+        if TEXT[ui] is not self.t:
+            self.t = TEXT[ui]
+            for widget, key, kind in self.texts:
+                self.apply_text(widget, key, kind)
+            self.refresh_autologin()
+            if hasattr(self, "current"):
+                self.refresh_controls()
+
+    # ---- pages -------------------------------------------------------------------------------------------
+    def page(self, name, title, subtitle, widget=None, focus=None, check=None, fill=False, help=None):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        box.set_valign(Gtk.Align.FILL if fill else Gtk.Align.CENTER)
+        t = None
+        if title or subtitle:   # list pages have none: their search field says what they are
+            head = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8); head.set_halign(Gtk.Align.CENTER)
+            t = label("", "title", wrap=True); head.pack_start(t, False, False, 0)
+            if title:
+                self.tr(t, title)
+            if subtitle:
+                s = self.tr(label("", "subtitle", wrap=True, chars=40), subtitle); s.set_valign(Gtk.Align.CENTER)
+                head.pack_start(s, False, False, 0)
+            box.pack_start(head, False, False, 0); self.heads.append(head)
+        if widget:
+            box.pack_start(widget, fill, fill, 8)
+        if help:   # the rule for what to type, right under the field
+            h = self.tr(label("", "help", wrap=True, chars=46), help); h.set_halign(Gtk.Align.START)
+            box.pack_start(h, False, False, 0)
+        self.stack.add_named(box, name)
+        self.pages.append({"name": name, "focus": focus, "check": check, "title": t})
+
+    def ghost(self, field, key):
+        """Grey text inside a search field saying what it searches, until the first letter is typed. GTK's own
+        placeholder hides as soon as the field has the cursor, and these fields get it from the start."""
+        over = Gtk.Overlay(); over.add(field)
+        hint = self.tr(label("", "ghost"), key); hint.set_halign(Gtk.Align.START); hint.set_margin_start(36)
+        over.add_overlay(hint); over.set_overlay_pass_through(hint, True)
+        field.connect("changed", lambda f: hint.set_opacity(0 if f.get_text() else 1))
+        return over
+
+    def entry(self, placeholder, secret=False):
+        e = Gtk.Entry(visibility=not secret)
+        if placeholder:
+            self.tr(e, placeholder, "placeholder")
+        e.connect("activate", lambda *_: self.next())
+        if secret:   # eye to show what was typed
+            e.set_icon_from_pixbuf(Gtk.EntryIconPosition.SECONDARY, pixbuf(f"{ASSETS}/eye.svg", 18))
+            self.tr(e, "show", "tooltip")
+            e.connect("icon-press", self.toggle_secret)
+        return e
+
+    def toggle_secret(self, e, *_):
+        e.set_visibility(not e.get_visibility())
+        e.set_icon_from_pixbuf(Gtk.EntryIconPosition.SECONDARY,
+                               pixbuf(f"{ASSETS}/{'eye-off' if e.get_visibility() else 'eye'}.svg", 18))
+
+    def build(self):
+        self.page("welcome", "welcome", "welcome_sub")
+
+        lbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        self.lsearch = Gtk.SearchEntry()
+        self.langs, self.langs_sw = listbox([(l[0], l[1]) for l in LANGUAGES])
+        self.lmatch = matcher("")
+        self.langs.set_filter_func(lambda row: self.lmatch(f"{LANG[row.key][1]} {row.key} {SEARCH[row.key]}"))
+        self.lsearch.connect("search-changed", self.on_lang_search)
+        self.lsearch.connect("activate", lambda *_: self.next())
+        self.lsearch.connect("key-press-event", self.search_arrows, self.langs)
+        self.langs.connect("row-activated", lambda *_: self.next())
+        # browsing the list (arrows, taps) switches the language live; typing a search does not, or the
+        # keyboard layout would change under the fingers: the pick is applied with Enter
+        self.langs.connect("row-selected", lambda b, r: r and not self.lsearch.has_focus() and self.set_language(r.key))
+        lbox.pack_start(self.ghost(self.lsearch, "lang_ph"), False, False, 0); lbox.pack_start(self.langs_sw, True, True, 0)
+        self.page("language", None, None, lbox, focus=self.focus_lang, check=self.check_language, fill=True)
+
+        zbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        self.zsearch = Gtk.SearchEntry()
+        self.zones, self.zones_sw = listbox([(z, z.replace("_", " ")) for z in run("timedatectl", "list-timezones").split()])
+        self.zmatch = matcher("")
+        self.zones.set_filter_func(lambda row: self.zmatch(row.key))
+        self.zsearch.connect("key-press-event", self.search_arrows, self.zones)
+        self.zsearch.connect("search-changed", self.on_zone_search)
+        self.zsearch.connect("activate", lambda *_: self.next())
+        self.zones.connect("row-activated", lambda *_: self.next())
+        zbox.pack_start(self.ghost(self.zsearch, "zone_ph"), False, False, 0); zbox.pack_start(self.zones_sw, True, True, 0)
+        self.page("zone", None, None, zbox, focus=self.focus_zone, check=self.check_zone, fill=True)
+
+        # the accounts, in the order of Armbian's first login: root, then the user, its password, its real name
+        self.rpw1 = self.entry(None, secret=True)
+        self.page("root", "root", None, self.rpw1, focus=lambda: self.rpw1.grab_focus(), check=self.check_rpw1)
+        self.rpw2 = self.entry(None, secret=True)
+        self.page("root2", "root2", None, self.rpw2, focus=lambda: self.rpw2.grab_focus(), check=self.check_rpw2)
+        self.user = self.entry(None)
+        self.page("account", "acc", None, self.user, focus=lambda: self.user.grab_focus(), check=self.check_user,
+                  help="acc_help")
+        self.pw1 = self.entry(None, secret=True)
+        self.page("password", "pw", None, self.pw1, focus=lambda: self.pw1.grab_focus(), check=self.check_pw1)
+        self.pw2 = self.entry(None, secret=True)
+        self.page("confirm", "pw2", None, self.pw2, focus=lambda: self.pw2.grab_focus(), check=self.check_pw2)
+        self.realname = self.entry(None)
+        # the last account question: a desktop that opens by itself (Armbian, Raspberry Pi OS), or the
+        # login screen asking for the password at each start
+        nbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14); nbox.pack_start(self.realname, False, False, 0)
+        row = Gtk.Box(spacing=14)
+        row.pack_start(self.tr(label("", "option"), "autologin"), False, False, 0)
+        self.autologin = Gtk.ToggleButton(active=True); self.autologin.get_style_context().add_class("toggle")
+        self.autologin.set_valign(Gtk.Align.CENTER)
+        self.autologin.connect("toggled", lambda *_: self.refresh_autologin()); self.refresh_autologin()
+        row.pack_start(self.autologin, False, False, 0); nbox.pack_start(row, False, False, 0)
+        self.page("name", "name", None, nbox, focus=self.focus_realname, check=self.check_realname)
+
+        self.wifis, self.wifis_sw = listbox([])
+        self.no_wifi = Gtk.ListBoxRow(); self.no_wifi.key = ""
+        self.no_wifi.add(self.tr(Gtk.Label(xalign=0), "wifi_none")); self.wifis.add(self.no_wifi)
+        self.rescan = Gtk.ListBoxRow(); self.rescan.key = "__rescan__"
+        rb = Gtk.Box(spacing=8); rb.pack_start(Gtk.Image.new_from_pixbuf(pixbuf(f"{ASSETS}/refresh.svg", 18)), False, False, 0)
+        self.rescan_label = self.tr(Gtk.Label(xalign=0), "wifi_searching"); rb.pack_start(self.rescan_label, False, False, 0)
+        self.rescan.add(rb); self.wifis.add(self.rescan)
+        self.wifis.connect("row-activated", self.on_wifi_row)
+        self.page("wifi", "wifi", None, self.wifis_sw, focus=self.focus_wifi, check=self.check_wifi, fill=True)
+        self.wpw = self.entry("wpw_ph", secret=True)
+        self.page("wifipw", None, None, self.wpw, focus=self.focus_wpw, check=self.check_wpw)
+
+        done = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        self.spinner = Gtk.Spinner(); self.spinner.set_size_request(36, 36)
+        done.pack_start(self.spinner, False, False, 0)
+        self.page("apply", "apply", "apply_sub", done)
+        # Keep factory settings on the first page: the shipped settings, in the order of the steps,
+        # once confirmed (reached only from there)
+        kept = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16); kept.set_halign(Gtk.Align.CENTER)
+        kept.pack_start(self.tr(label("", "option"), "skip_lang", "markup"), False, False, 0)
+        table = Gtk.Grid(column_spacing=40, row_spacing=8); table.set_halign(Gtk.Align.CENTER)
+        table.attach(self.tr(label("", "help"), "skip_user"), 0, 0, 1, 1)
+        table.attach(self.tr(label("", "help"), "skip_pw"), 1, 0, 1, 1)
+        for row, (user, password) in enumerate((("root", SHIPPED[1]), SHIPPED), 1):
+            for col, value in enumerate((user, password)):
+                cell = label("", "option"); cell.set_markup(emphasis(f"*{value}*")); table.attach(cell, col, row, 1, 1)
+        kept.pack_start(table, False, False, 0)
+        kept.pack_start(self.tr(label("", "option"), "skip_auto", "markup"), False, False, 0)
+        self.page("skip", "skip_title", None, kept)
+
+    # ---- checks: return an error text, or None to go on --------------------------------------------------
+    def check_language(self):
+        row = self.langs.get_selected_row()
+        if not row or not row.get_child_visible():
+            return self.t["lang_err"]
+        self.set_language(row.key)
+
+    def check_zone(self):
+        row = self.zones.get_selected_row()
+        if not row or not row.get_child_visible():
+            return self.t["zone_err"]
+        self.data["zone"] = row.key
+
+    def check_user(self):
+        name = self.user.get_text().strip()
+        if not NAME.match(name) or name in RESERVED:
+            return self.t["acc_err"]
+        self.data["user"] = name
+        for widget, key, kind in self.texts:   # the password pages name the account
+            if "{user}" in self.t[key]:
+                self.apply_text(widget, key, kind)
+
+    def check_rpw1(self):
+        if not self.rpw1.get_text():
+            return self.t["pw_err"]
+        self.data["root_password"] = self.rpw1.get_text()
+
+    def check_rpw2(self):
+        if self.rpw2.get_text() != self.data["root_password"]:
+            self.rpw2.set_text("")
+            return self.t["pw2_err"]
+
+    def focus_realname(self):
+        """Armbian offers the username with a capital as the real name: Enter keeps it."""
+        if not self.realname.get_text():
+            self.realname.set_text(self.data["user"].capitalize())
+        self.realname.grab_focus(); self.realname.set_position(-1)
+
+    def check_realname(self):
+        self.data["realname"] = self.realname.get_text().strip() or self.data["user"].capitalize()
+        self.data["autologin"] = self.autologin.get_active()
+
+    def check_pw1(self):
+        if not self.pw1.get_text():
+            return self.t["pw_err"]
+        self.data["password"] = self.pw1.get_text()
+
+    def check_pw2(self):
+        if self.pw2.get_text() != self.data["password"]:
+            self.pw2.set_text("")
+            return self.t["pw2_err"]
+
+    def check_wifi(self):
+        row = self.wifis.get_selected_row()
+        if row is self.rescan:
+            return self.t["wifi_err"]
+        self.data["wifi"] = row.key if row else ""
+
+    def check_wpw(self):
+        self.data["wifi_password"] = self.wpw.get_text()
+
+    # ---- navigation --------------------------------------------------------------------------------------
+    def visible(self, i):
+        name = self.pages[i]["name"]
+        if name == "wifi":
+            return self.has_wifi
+        if name == "wifipw":
+            return bool(self.data["wifi"])
+        return name != "skip"
+
+    def show_page(self, i, back=False):
+        self.current = i
+        self.stack.set_visible_child_name(self.pages[i]["name"])
+        self.refresh_controls()
+        self.fit_lists()
+        if self.pages[i]["focus"]:
+            self.pages[i]["focus"]()
+        elif self.pages[i]["name"] != "apply":
+            self.go.grab_focus()
+
+    def say(self, text):
+        self.error.set_text(text or ""); self.error.set_visible(bool(text))
+
+    def next(self):
+        if not hasattr(self, "current") or self.pages[self.current]["name"] == "apply":
+            return
+        if self.pages[self.current]["name"] == "skip":
+            self.data = {"skip": True}
+            self.show_page(self.index("apply"))
+            self.spinner.start(); threading.Thread(target=self.apply, daemon=True).start()
+            return
+        check = self.pages[self.current]["check"]
+        err = check() if check else None
+        self.say(err or "")
+        if err:
+            return
+        i = self.current + 1
+        while not self.visible(i):
+            i += 1
+        self.show_page(i)
+        if self.pages[i]["name"] == "apply":
+            self.spinner.start(); threading.Thread(target=self.apply, daemon=True).start()
+
+    def index(self, name):
+        return next(i for i, p in enumerate(self.pages) if p["name"] == name)
+
+    def previous(self, skip=False):
+        if self.pages[self.current]["name"] == "skip":
+            self.show_page(0, back=True)
+        elif self.current == 0 and skip:
+            self.show_page(self.index("skip"))
+        elif 0 < self.current and self.pages[self.current]["name"] != "apply":
+            i = self.current - 1
+            while i > 0 and not self.visible(i):
+                i -= 1
+            self.say(""); self.show_page(i, back=True)
+
+    def on_key(self, _w, ev):
+        if ev.keyval == Gdk.KEY_Escape:
+            self.previous()
+            return True
+        return False
+
+    # ---- mouse, touch, on-screen keyboard ----------------------------------------------------------------
+    def touch_screen(self):
+        return bool(self.seat.get_slaves(Gdk.SeatCapabilities.TOUCH))
+
+    def has_mouse(self):
+        not_mice = ("xtest", "sunxi-ir", "gpio-keys", "keyboard", "consumer control")
+        return self.touch_screen() or any(not any(w in d.get_name().lower() for w in not_mice)
+                                          for d in self.seat.get_slaves(Gdk.SeatCapabilities.POINTER))
+
+    def refresh_controls(self):
+        self.on_screen_keyboard()
+        if not hasattr(self, "current"):
+            return
+        last, first = self.pages[self.current]["name"] == "apply", self.current == 0
+        skip = self.pages[self.current]["name"] == "skip"
+        mouse = self.has_mouse()
+        self.go.set_label(self.t["start"] if first else self.t["skip_go"] if skip else self.t["go"])
+        self.back.set_label(self.t["skip"] if first else self.t["back"])
+        self.go.set_visible(not last and (mouse or first or skip))
+        self.back.set_visible(not last and (mouse or first or skip))
+        self.hint.set_text("" if first else self.t["hint"] if mouse else self.t["hint_kbd"])
+        self.hint.set_visible(not last and not first and not skip)
+        shown = [j for j, p in enumerate(self.pages) if self.visible(j) and p["name"] != "apply"]
+        self.step.set_text("" if last or first or skip else
+                           self.t["step"].format(shown.index(self.current), len(shown) - 1))
+        if self.pages[self.current]["name"] == "wifipw":
+            self.pages[self.current]["title"].set_text(self.t["wpw"].format(self.data["wifi"]))
+
+    def osk_geometry(self):
+        """(xid, width, height) of onboard's keyboard window as X has it, or None while it is not on screen yet."""
+        m = re.search(r'^\s*(0x[0-9a-f]+) "Onboard": .*?\s(\d+)x(\d+)[+-]', run("xwininfo", "-root", "-children"), re.M)
+        if not m or not 60 < int(m.group(3)) < self.geo.height * 0.7:
+            return None
+        return int(m.group(1), 16), int(m.group(2)), int(m.group(3))
+
+    def kb_height(self):
+        """Height of the on-screen keyboard: asked as 38 % of the screen, onboard may keep its own proportions."""
+        g = self.osk_geometry()
+        return g[2] if g else int(self.geo.height * 0.38)
+
+    def on_screen_keyboard(self):
+        """A touch screen: open the image's on-screen keyboard (onboard), docked along the bottom, with a tab
+        above it to fold it away and bring it back; the card shrinks to fit in the space left above."""
+        if self.osk or not self.touch_screen() or not os.path.exists("/usr/bin/onboard"):
+            return
+        for schema, key, value in (("org.onboard", "show-tooltips", "false"), ("org.onboard.window", "docking-enabled", "false")):
+            subprocess.run(["gsettings", "set", schema, key, value], capture_output=True)
+        h = self.kb_height()
+        theme = osk_theme()
+        self.osk = subprocess.Popen(["onboard", f"--size={self.geo.width}x{h}", "-x", str(self.geo.x),
+                                     "-y", str(self.geo.y + self.geo.height - h), f"--layout={osk_layout()}"]
+                                    + ([f"--theme={theme}"] if theme else []))
+        self.fold_keyboard(False)
+
+    def round_tab(self, win, alloc):
+        """Pill-shaped button window: cut its corners off (no compositor, so no transparent corners)."""
+        w, h, r = alloc.width, alloc.height, alloc.height // 2
+        region = cairo.Region()
+        for y in range(h):
+            dy = max(r - y - 0.5, y + 0.5 - (h - r), 0)
+            inset = int(round(r - math.sqrt(max(r * r - dy * dy, 0)))) if dy else 0
+            region.union(cairo.RectangleInt(inset, y, w - 2 * inset, 1))
+        if win.get_window():
+            win.get_window().shape_combine_region(region, 0, 0)
+
+    def place(self, kb_top):
+        """Keyboard top edge at kb_top: the keyboard window there, the button just above its right end."""
+        self.osk_win.move(self.geo.x, kb_top)
+        tw, th = self.tab.get_size()
+        self.tab.move(self.geo.x + self.geo.width - tw - 24, kb_top - th - 10)
+
+    def fold_keyboard(self, fold):
+        """fold=True slides the on-screen keyboard down off the screen, False slides it back up; the button
+        rides on it. The card is laid out once, before the keyboard comes up or after it went down."""
+        win = self.osk_window()
+        if not win:
+            # onboard not on screen yet: try again shortly, once its real size is known
+            GLib.timeout_add(400, lambda: self.fold_keyboard(fold) and False)
+            return
+        self.osk_open = not fold
+        if not fold:
+            try:   # onboard may have hidden itself: ask it to show (no-op when it is shown)
+                Gio.DBusProxy.new_for_bus_sync(Gio.BusType.SESSION, Gio.DBusProxyFlags.DO_NOT_LOAD_PROPERTIES, None,
+                                               "org.onboard.Onboard", "/org/onboard/Onboard/Keyboard",
+                                               "org.onboard.Onboard.Keyboard", None).call(
+                    "Show", None, Gio.DBusCallFlags.NONE, 2000, None, None, None)
+            except GLib.Error:
+                pass
+        self.tab_icon.set_from_pixbuf(pixbuf(f"{ASSETS}/{'chevrons-up' if fold else 'chevrons-down'}.svg", 22))
+        self.tab.show_all()
+        bottom, kb = self.geo.y + self.geo.height, self.kb_height()
+        start, end = (bottom - kb, bottom) if fold else (bottom, bottom - kb)
+        if not fold:
+            self.set_compact(True)
+        frames, step = 8, [0]
+
+        def tick():
+            step[0] += 1
+            k = 1 - (1 - step[0] / frames) ** 3               # ease out
+            self.place(int(start + (end - start) * k))
+            if step[0] < frames:
+                return True
+            if fold:
+                self.set_compact(False)
+            return False
+        self.place(start); GLib.timeout_add(16, tick)
+
+    def osk_window(self):
+        """onboard's top-level X window, looked up once it is on screen."""
+        if getattr(self, "osk_win", None):
+            return self.osk_win
+        g = self.osk_geometry()
+        if g:
+            self.osk_win = GdkX11.X11Window.foreign_new_for_display(Gdk.Display.get_default(), g[0])
+        return getattr(self, "osk_win", None)
+
+    def set_card_width(self, width):
+        side = max(12, (self.geo.width - width) // 2)
+        self.outer.set_margin_start(side); self.outer.set_margin_end(side)
+
+    def set_compact(self, keyboard_open):
+        """A docked keyboard (touch screen): the card takes its row layout and one fixed size that fits above the
+        open keyboard, then only moves: up when the keyboard opens, centred when it is folded. Same fonts."""
+        if not getattr(self, "rows", False):
+            self.rows = True
+            self.brand.set_orientation(Gtk.Orientation.HORIZONTAL); self.brand.set_spacing(14)
+            for sw in (self.langs_sw, self.zones_sw, self.wifis_sw):
+                sw.set_size_request(-1, 84)
+        free = self.geo.height - (self.kb_height() if keyboard_open else 0)
+        self.set_card_width(min(680, self.geo.width - 48))
+        self.card.set_size_request(-1, min(free - 24, 680))
+        self.outer.set_margin_bottom(self.geo.height - free)
+
+    def stack_page_height(self, page):
+        """Card height with the given page shown and its list folded (for one size that suits every page)."""
+        shown = self.stack.get_visible_child_name()
+        self.stack.set_visible_child_name(page["name"])
+        h = self.card.get_preferred_height()[1]
+        if shown:
+            self.stack.set_visible_child_name(shown)
+        return h
+
+    def fit_lists(self):
+        """Give the lists whatever height the screen leaves once the rest of the card is laid out, so a list
+        always shows as many rows as fit. With a docked keyboard the card has a fixed size and its lists
+        simply fill it."""
+        if not hasattr(self, "free") or getattr(self, "rows", False):
+            return
+        lists = (self.langs_sw, self.zones_sw, self.wifis_sw)
+        for sw in lists:
+            sw.set_size_request(-1, 1)
+        rest = max(self.stack_page_height(p) for p in self.pages) if getattr(self, "rows", False) else \
+            self.card.get_preferred_height()[1]             # card height with the list folded
+        room = self.free - rest - 24                         # 12 px of air above and below the card
+        for sw in lists:
+            sw.set_size_request(-1, max(84, min(360, room)))
+
+    # ---- screen ------------------------------------------------------------------------------------------
+    def show_pointer(self, show):
+        """Arrow or no pointer at all, on every window of the session (ours, the keyboard, the background)."""
+        if show == self.pointer_shown:
+            return
+        self.pointer_shown = show
+        cursor = Gdk.Cursor.new_from_name(Gdk.Display.get_default(), "default" if show else "none")
+        for win in (self.get_window(), self.tab.get_window(), Gdk.get_default_root_window(),
+                    getattr(self, "osk_win", None)):
+            if win:
+                win.set_cursor(cursor)
+
+    def on_pointer_event(self, _w, ev):
+        device = ev.get_source_device()
+        touch = device is not None and device.get_source() == Gdk.InputSource.TOUCHSCREEN
+        kind = ev.get_event_type()
+        if kind in (Gdk.EventType.TOUCH_BEGIN, Gdk.EventType.BUTTON_PRESS, Gdk.EventType.TOUCH_END,
+                    Gdk.EventType.BUTTON_RELEASE) and touch:
+            self.show_pointer(False)                       # a tap: no pointer
+        elif kind in (Gdk.EventType.TOUCH_UPDATE, Gdk.EventType.MOTION_NOTIFY):
+            state = ev.get_state()[1]                      # (has_state, state)
+            pressed = kind == Gdk.EventType.TOUCH_UPDATE or bool(state & Gdk.ModifierType.BUTTON1_MASK)
+            self.show_pointer(not touch or pressed)        # a mouse, or a finger sliding
+        return False
+
+    def on_map(self, *_):
+        self.pointer_shown = None
+        self.show_pointer(not self.touch_screen())
+        # no window manager: take the keyboard explicitly, X would otherwise send keys under the pointer
+        self.get_window().focus(Gdk.CURRENT_TIME)
+        self.show_page(0)
+
+    def on_monitors(self, *_):
+        """Screen re-plugged or resolution changed: light it up again and cover it again."""
+        subprocess.run(["xrandr", "--auto"], capture_output=True)
+        g = Gdk.Display.get_default().get_monitor(0).get_geometry()
+        if (g.width, g.height) != (self.geo.width, self.geo.height):
+            self.geo = g; self.move(g.x, g.y); self.resize(g.width, g.height)
+
+    # ---- time zone and WiFi lists ------------------------------------------------------------------------
+    def focus_lang(self):
+        self.lsearch.set_text(""); self.lmatch = matcher(""); self.langs.invalidate_filter()
+        select(self.langs, self.data["lang"]); self.lsearch.grab_focus()
+
+    def on_lang_search(self, *_):
+        self.lmatch = matcher(self.lsearch.get_text()); self.langs.invalidate_filter()
+        first_visible(self.langs)
+
+    def search_arrows(self, entry, ev, box):
+        """Down arrow from a search box goes into its list."""
+        if ev.keyval == Gdk.KEY_Down:
+            row = box.get_selected_row()
+            if row:
+                row.grab_focus()
+            return True
+        return False
+
+    def focus_zone(self):
+        self.zsearch.set_text(""); self.zmatch = matcher(""); self.zones.invalidate_filter()
+        select(self.zones, self.data["zone"])
+        self.zsearch.grab_focus()
+
+    def on_zone_search(self, *_):
+        self.zmatch = matcher(self.zsearch.get_text()); self.zones.invalidate_filter()
+        first_visible(self.zones)
+
+    def on_wifi_row(self, _box, row):
+        if row is self.rescan:
+            if self.rescan_label.get_text() != self.t["wifi_searching"]:
+                self.rescan_label.set_text(self.t["wifi_searching"])
+                threading.Thread(target=self.scan_wifi, daemon=True).start()
+        else:
+            self.next()
+
+    def scan_wifi(self):
+        seen = []
+        for ssid in run("nmcli", "-t", "-f", "SSID", "device", "wifi", "list", "--rescan", "yes").splitlines():
+            ssid = ssid.replace("\\:", ":")
+            if ssid and ssid not in seen:
+                seen.append(ssid)
+        self.networks = seen
+        GLib.idle_add(self.fill_wifi)
+
+    def fill_wifi(self):
+        for row in self.wifis.get_children():
+            if row not in (self.no_wifi, self.rescan):
+                self.wifis.remove(row)
+        self.rescan_label.set_text(self.t["wifi_again"])
+        for ssid in self.networks:
+            row = Gtk.ListBoxRow(); row.key = ssid; row.add(Gtk.Label(label=ssid, xalign=0))
+            self.wifis.insert(row, len(self.wifis.get_children()) - 1)
+        self.wifis.show_all()
+        return False
+
+    def focus_wifi(self):
+        select(self.wifis, self.data["wifi"])
+
+    def focus_wpw(self):
+        self.wpw.grab_focus()
+
+    # ---- apply -------------------------------------------------------------------------------------------
+    def apply(self):
+        r = subprocess.run(["sudo", "-n", "/usr/local/sbin/smartpi-firstboot-apply"], input=json.dumps(self.data),
+                           capture_output=True, text=True)
+        GLib.idle_add(self.applied, r.returncode, (r.stdout + r.stderr).strip())
+
+    def applied(self, code, out):
+        self.spinner.stop()
+        if code != 0:
+            self.say(out[-300:] or self.t["failed"])
+            self.show_page(self.index("account"), back=True)
+        return False
+
+
+Wizard().show_all()
+Gtk.main()

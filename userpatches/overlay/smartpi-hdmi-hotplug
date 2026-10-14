@@ -1,0 +1,16 @@
+#!/bin/sh
+# Called on every HDMI hotplug (udev, 90-smartpi-hdmi-hotplug.rules): turns a
+# screen that is connected but left off back on, at its preferred mode.
+# X switches the screen off when it finds no monitor at start, and nothing
+# turns it back on when the monitor shows up: a screen switched off and on, or
+# the half second the H3 HDMI drops its hotplug line each time an X server
+# starts (end of the first-boot wizard, log out, switch user), and the picture
+# never comes back. Every X server of the display manager is checked: switching
+# user starts a second one.
+for auth in /run/lightdm/root/:*; do
+    [ -e "$auth" ] || continue
+    export DISPLAY="${auth##*/}" XAUTHORITY="$auth"
+    xrandr | sed -n -E 's/^([^ ]+) connected (primary )?\(.*/\1/p' | while read -r output; do
+        xrandr --output "$output" --auto
+    done
+done

@@ -12,6 +12,72 @@ enable_extension "rtl8188eu-ap"
 # AIC8800 USB WiFi 6 + Bluetooth dongles work as soon as they are plugged in (userpatches/extensions/).
 enable_extension "aic8800-usb"
 
+# USB WiFi and Bluetooth dongles: every driver the kernel has, as modules that
+# load only when such a dongle is plugged in. Armbian's sunxi config leaves out:
+# - rtw88 8812AU/8821AU/8814AU: Armbian builds Realtek's out-of-tree 8812au
+#   driver into kernels older than 6.17 only, so on 6.18 these dongles showed
+#   up in lsusb with no interface;
+# - rtw89 8851BU/8852BU (Realtek WiFi 6) and mt7925u (MediaTek WiFi 7);
+# - btusb's MediaTek support, the Bluetooth half of MediaTek WiFi 6/7 dongles.
+# Left out on purpose: Broadcom USB and ZyDAS ZD1211, whose firmware is not in
+# linux-firmware.
+function custom_kernel_config__smartpi1_usb_wifi_bt() {
+	declare -a wifi=(RTW89 RTW89_8851BU RTW89_8852BU MT7925U)
+	linux-version compare "${KERNEL_MAJOR_MINOR}" ge 6.17 && wifi+=(RTW88_8812AU RTW88_8821AU RTW88_8814AU)
+	kernel_config_modifying_hashes+=("usb_wifi_bt=${wifi[*]} BT_HCIBTUSB_MTK")
+	[[ ! -f .config ]] && return 0
+	declare opt
+	for opt in "${wifi[@]}"; do
+		kernel_config_set_m "CONFIG_${opt}"
+	done
+	kernel_config_set_y CONFIG_BT_HCIBTUSB_MTK
+}
+
+# ...and their firmware. armbian-firmware is a subset of linux-firmware that
+# leaves out common dongles (AR9271, MT7610U, RTL8188FTV, RTL8761BU Bluetooth):
+# the module loads and the dongle stays dead. Every file that a USB WiFi or
+# Bluetooth module asks for (modinfo, including the chip and helper modules it
+# pulls in, btrtl under btusb for instance) and the image lacks is taken from a
+# pinned linux-firmware release, so the list follows the kernel. Names that
+# linux-firmware only declares as links (WHENCE) become links to their target.
+declare -g SMARTPI_LINUX_FIRMWARE_TAG="20260916"
+function post_family_tweaks__smartpi1_usb_dongle_firmware() {
+	declare url="https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain"
+	declare cache="${SRC}/cache/linux-firmware-${SMARTPI_LINUX_FIRMWARE_TAG}"
+	declare -a wanted=()
+	mapfile -t wanted < <(chroot "${SDCARD}" /bin/bash -s <<- 'LIST'
+		for k in /lib/modules/*; do
+			k=${k##*/}
+			for m in $(find /lib/modules/$k/kernel/drivers/net/wireless /lib/modules/$k/kernel/drivers/bluetooth -name '*.ko*'); do
+				modinfo -F alias "$m" | grep -q '^usb:' && modprobe -S "$k" -D "$(modinfo -F name "$m")" | awk '/^insmod/ {print $2}'
+			done
+		done | sort -u | while read -r m; do modinfo -F firmware "$m"; done | sort -u | while read -r f; do
+			[ -e "/lib/firmware/$f" ] || [ -e "/lib/firmware/$f.zst" ] || [ -e "/lib/firmware/$f.xz" ] || echo "$f"
+		done
+	LIST
+	)
+	mkdir -p "${cache}"
+	[[ -s "${cache}/WHENCE" ]] || wget --quiet --tries=3 -O "${cache}/WHENCE" "${url}/WHENCE?h=${SMARTPI_LINUX_FIRMWARE_TAG}" ||
+		exit_with_error "USB dongle firmware" "could not download linux-firmware ${SMARTPI_LINUX_FIRMWARE_TAG} WHENCE"
+	declare f file target added=0 absent=0
+	for f in "${wanted[@]}"; do
+		target=$(awk -v f="${f}" '$1 == "Link:" && $2 == f {print $4}' "${cache}/WHENCE")
+		file="${f}"
+		[[ -n "${target}" ]] && file="$(dirname "${f}")/${target}"
+		if [[ ! -e "${SDCARD}/lib/firmware/${file}" ]]; then
+			if [[ ! -s "${cache}/${file}" ]]; then
+				mkdir -p "$(dirname "${cache}/${file}")"
+				wget --quiet --tries=3 -O "${cache}/${file}.tmp" "${url}/${file}?h=${SMARTPI_LINUX_FIRMWARE_TAG}" && mv "${cache}/${file}.tmp" "${cache}/${file}" ||
+					{ rm -f "${cache}/${file}.tmp"; absent=$((absent + 1)); continue; }
+			fi
+			install -D -m 644 "${cache}/${file}" "${SDCARD}/lib/firmware/${file}"
+		fi
+		[[ -n "${target}" ]] && ln -sf "${target}" "${SDCARD}/lib/firmware/${f}"
+		added=$((added + 1))
+	done
+	display_alert "USB WiFi/Bluetooth firmware" "${added} added from linux-firmware ${SMARTPI_LINUX_FIRMWARE_TAG}, ${absent} not published there" "info"
+}
+
 # Replace U-Boot's built-in logo with the Yumi one. It is drawn the instant the
 # video device is probed — before any file is read from the SD card — so it
 # appears immediately, unlike /boot/boot.bmp which the boot script displays

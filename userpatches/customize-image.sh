@@ -41,8 +41,10 @@ Main() {
             hardenAgainstPowerCuts
             installBootTelemetry
             if [[ "${BUILD_DESKTOP}" = "yes" ]]; then
+                enableDesktopLogin
+                installHdmiHotplug
                 installRotationScript
-                patchLightdm
+                setUpTouchScreen
                 copyOnboardConf
                 patchOnboardAutostart
                 installScreensaverSetup
@@ -166,14 +168,27 @@ hardenAgainstPowerCuts() {
     #   persistent, and armbian-ramlog moves that journal to /var/log.hdd on the
     #   card, written continuously. The current boot's log stays in /run.
     # - hardware watchdog: sunxi_wdt is built in (16 s maximum); PID 1 pings it
-    #   every 8 s, so a hung system resets itself. RebootWatchdogSec stays off:
-    #   the driver cannot go beyond 16 s and the sync in systemd-shutdown may
-    #   take longer than that without a ping.
+    #   every 8 s, so a hung system resets itself. It is armed as the first
+    #   services start (basic.target, the earliest point where busctl reaches
+    #   PID 1 over D-Bus), not by system.conf: PID 1 does not ping while it
+    #   runs generators and loads units, 13 s measured from a USB stick behind
+    #   a USB 1.1 hub, and beyond 16 s the watchdog reset every boot in a loop.
+    #   After that phase the longest PID 1 silence measured on that drive was
+    #   9 s, so a boot that hangs later is still reset.
+    #   RebootWatchdogSec stays off: the driver cannot go beyond 16 s and the
+    #   sync in systemd-shutdown may take longer than that without a ping.
+    #   ponytail: a daemon-reexec (systemd upgrade) rereads system.conf and
+    #   disarms the watchdog until the next boot.
     echo "Harden against hard power cuts ..."
     addKernelArg panic=10
     mkdir -p /etc/systemd/journald.conf.d /etc/systemd/system.conf.d
     printf '[Journal]\nStorage=volatile\nRuntimeMaxUse=32M\n' > /etc/systemd/journald.conf.d/10-smartpi-journal.conf
-    printf '[Manager]\nRuntimeWatchdogSec=16\nRebootWatchdogSec=off\n' > /etc/systemd/system.conf.d/10-smartpi-watchdog.conf
+    printf '[Manager]\nRebootWatchdogSec=off\n' > /etc/systemd/system.conf.d/10-smartpi-watchdog.conf
+    printf '%s\n' '[Unit]' 'Description=Arm the hardware watchdog once systemd has loaded its units' \
+        '' '[Service]' 'Type=oneshot' \
+        'ExecStart=/usr/bin/busctl set-property org.freedesktop.systemd1 /org/freedesktop/systemd1 org.freedesktop.systemd1.Manager RuntimeWatchdogUSec t 16000000' \
+        '' '[Install]' 'WantedBy=multi-user.target' > /etc/systemd/system/smartpi-watchdog.service
+    systemctl enable smartpi-watchdog.service
     echo "Harden against hard power cuts ... [DONE]"
 }
 
@@ -240,11 +255,92 @@ EOF
     echo "SmartPad rotation script ... [DONE]"
 }
 
-patchLightdm() {
-    local conf="/etc/lightdm/lightdm.conf.d/12-onboard.conf"
-    echo "Enable OnScreen Keyboard in Lightdm ..."
-    echo "onscreen-keyboard = true" | tee "${conf}"
-    echo "Enable OnScreen Keyboard in Lightdm ... [DONE]"
+enableDesktopLogin() {
+    # Armbian enables the display manager from its first-login wizard, once the
+    # user exists; its cloud-init extension removes that wizard, so the desktop
+    # images booted to a text console with lightdm never started. lightdm is
+    # the display manager from the start, and smartpi-desktop-session decides
+    # before each start until a desktop account is set: a card flashed as-is
+    # (still pi / yumi) opens the SmartPi first-boot wizard (root password,
+    # user, its password and real name in the order of Armbian's first login,
+    # then language, keyboard, time zone, WiFi), a card set up with Raspberry
+    # Pi Imager opens the desktop of its account. Either way the desktop then
+    # opens without a login prompt, as on Raspberry Pi OS.
+    echo "Enable the desktop login and the first-boot wizard ..."
+    if [[ ! -x /usr/sbin/lightdm ]]; then
+        echo "WARNING: lightdm is not installed, the desktop stays off"
+        return 0
+    fi
+    # what the wizard runs on: GTK 3 from Python, the on-screen keyboard, xrandr/xset/xwininfo;
+    # gir1.2-atspi-2.0, only recommended by onboard, is what lets it open on a touched text field
+    apt-get install -y --no-install-recommends python3-gi gir1.2-gtk-3.0 onboard gir1.2-atspi-2.0 \
+        x11-xserver-utils x11-utils
+    ln -sfv /lib/systemd/system/lightdm.service /etc/systemd/system/display-manager.service
+    local src=/tmp/overlay/firstboot-wizard
+    install -D -m 755 "${src}/firstboot-wizard" /usr/local/lib/smartpi/firstboot-wizard
+    install -d /usr/share/smartpi/firstboot && cp -v "${src}"/assets/*.svg /usr/share/smartpi/firstboot/
+    install -m 755 "${src}/smartpi-firstboot-apply" "${src}/smartpi-desktop-session" /usr/local/sbin/
+    install -m 644 "${src}/smartpi-desktop-session.service" /etc/systemd/system/
+    install -m 644 "${src}/smartpi-setup.desktop" /usr/share/xsessions/
+    # the wizard's session runs as this system user; root only for applying the result
+    local groups
+    groups=$(for g in video audio netdev; do getent group "${g}" > /dev/null && printf '%s,' "${g}"; done)
+    useradd --system --create-home --home-dir /var/lib/smartpi-setup --shell /bin/bash \
+        ${groups:+--groups "${groups%,}"} smartpi-setup
+    echo "smartpi-setup ALL=(root) NOPASSWD: /usr/local/sbin/smartpi-firstboot-apply" > /etc/sudoers.d/smartpi-setup
+    chmod 440 /etc/sudoers.d/smartpi-setup
+    visudo -c -f /etc/sudoers.d/smartpi-setup
+    systemctl enable smartpi-desktop-session.service
+    echo "Enable the desktop login and the first-boot wizard ... [DONE]"
+}
+
+installHdmiHotplug() {
+    # X switches the screen off when it finds no monitor at start and never
+    # turns it back on: a screen switched off and on, or the half second the H3
+    # HDMI drops its hotplug line each time X starts (end of the first-boot
+    # wizard, log out, switch user: 3 starts out of 6 on a SmartPi), and the
+    # picture never comes back. The handler turns it back on at each hotplug.
+    echo "Install the HDMI hotplug handler ..."
+    install -m 755 /tmp/overlay/smartpi-hdmi-hotplug /usr/local/sbin/
+    install -m 644 /tmp/overlay/90-smartpi-hdmi-hotplug.rules /etc/udev/rules.d/
+    echo "Install the HDMI hotplug handler ... [DONE]"
+}
+
+setUpTouchScreen() {
+    # A finger on the desktop: the on-screen keyboard on the login and lock
+    # screen and, in the desktop, opening by itself on a touched text field;
+    # a tap opens the panel menus like a click; a double tap opens a folder.
+    echo "Set up the desktop for a touchscreen ..."
+    install -m 644 /tmp/overlay/90_smartpi-touch.gschema.override /usr/share/glib-2.0/schemas/
+    glib-compile-schemas /usr/share/glib-2.0/schemas
+    install -m 644 /tmp/overlay/60smartpi-touch /etc/X11/Xsession.d/
+    # Enter validates the login screen's password and the wizard's fields with Shift locked
+    local user home owner
+    for user in lightdm smartpi-setup; do
+        home=$(getent passwd "${user}" | cut -d: -f6) || continue
+        owner=(-o "${user}" -g "$(id -gn "${user}")")
+        install -d "${owner[@]}" "${home}/.config" "${home}/.config/gtk-3.0"
+        install -m 644 "${owner[@]}" /tmp/overlay/gtk-enter.css "${home}/.config/gtk-3.0/gtk.css"
+    done
+    # the web pages tell the on-screen keyboard about a touched field too
+    if [[ -d /etc/chromium.d ]]; then
+        install -m 644 /tmp/overlay/smartpi-onscreen-keyboard.chromium /etc/chromium.d/smartpi-onscreen-keyboard
+    fi
+    # two taps of a finger land further apart than two clicks (5 px)
+    local xsettings=/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml
+    if [[ -f "${xsettings}" ]]; then
+        sed -i -E 's|(name="DoubleClickTime" type="int" value=)"[0-9]+"|\1"500"|
+                   s|(name="DoubleClickDistance" type="int" value=)"[0-9]+"|\1"24"|' "${xsettings}"
+        grep DoubleClick "${xsettings}"
+    fi
+    # lock and switch user in the user menu of the panel, which Armbian hides
+    local panel=/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml
+    if [[ -f "${panel}" ]]; then
+        sed -i -E 's/value="-(lock-screen|switch-user)"/value="+\1"/
+                   0,/value="-separator"/ s/value="-separator"/value="+separator"/' "${panel}"
+        grep -E 'lock-screen|switch-user' "${panel}"
+    fi
+    echo "Set up the desktop for a touchscreen ... [DONE]"
 }
 
 copyOnboardConf() {
@@ -259,8 +355,9 @@ patchOnboardAutostart() {
     echo "Patch Onboard Autostart file ..."
     if [[ -f "${conf}" ]]; then
         sed -i '/OnlyShowIn/s/^/# /' "${conf}"
-        # Start the on-screen keyboard only when the SmartPad touchscreen is present
-        sed -i 's|^Exec=.*|Exec=sh -c "/usr/local/bin/smartpad-detect.sh \&\& exec onboard"|' "${conf}"
+        # on every screen, hidden until a text field is touched or its floating icon is
+        install -m 755 /tmp/overlay/smartpi-onboard /usr/local/bin/
+        sed -i 's|^Exec=.*|Exec=/usr/local/bin/smartpi-onboard|' "${conf}"
     else
         echo "WARNING: ${conf} not found (is the onboard package installed?)"
     fi
@@ -308,6 +405,17 @@ installCloudInitDefaults() {
     echo "Install cloud-init first-boot files ..."
     cp -v /tmp/overlay/cloud-init-user-data /boot/user-data
     cp -v /tmp/overlay/cloud-init-network-config /boot/network-config
+    if [[ "${RELEASE}" == "bullseye" ]]; then
+        # Debian 11's cloud-init 20.4 cannot apply network-config here: it
+        # rejected the Raspberry Pi OS format ("failed stage init-local"), and
+        # once reformatted it rendered eth0 for ifupdown, which fails at boot
+        # without a cable, never picks one up later and cannot do WiFi (no
+        # NetworkManager renderer before cloud-init 22.3). NetworkManager keeps
+        # the network, as on the other images; no network-config on this
+        # release.
+        printf 'network:\n  config: disabled\n' > /etc/cloud/cloud.cfg.d/99-smartpi-network.cfg
+        rm -fv /boot/network-config
+    fi
     cp -v /tmp/overlay/cloud-init-default-user.cfg /etc/cloud/cloud.cfg.d/90-smartpi-default-user.cfg
     chmod 644 /boot/user-data /boot/network-config
     rm -fv /boot/user-data.template
