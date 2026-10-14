@@ -272,9 +272,11 @@ enableDesktopLogin() {
         return 0
     fi
     # what the wizard runs on: GTK 3 from Python, the on-screen keyboard, xrandr/xset/xwininfo;
-    # gir1.2-atspi-2.0, only recommended by onboard, is what lets it open on a touched text field
-    apt-get install -y --no-install-recommends python3-gi gir1.2-gtk-3.0 onboard gir1.2-atspi-2.0 \
-        x11-xserver-utils x11-utils
+    # gir1.2-atspi-2.0, only recommended by onboard, is what lets it open on a touched text field.
+    # The package lists are not there at this stage: without the update apt found nothing, said so
+    # in a log nobody reads, and the image shipped without the one package not already pulled in.
+    apt-get update && apt-get install -y --no-install-recommends python3-gi gir1.2-gtk-3.0 onboard \
+        gir1.2-atspi-2.0 x11-xserver-utils x11-utils || exit 1
     ln -sfv /lib/systemd/system/lightdm.service /etc/systemd/system/display-manager.service
     local src=/tmp/overlay/firstboot-wizard
     install -D -m 755 "${src}/firstboot-wizard" /usr/local/lib/smartpi/firstboot-wizard

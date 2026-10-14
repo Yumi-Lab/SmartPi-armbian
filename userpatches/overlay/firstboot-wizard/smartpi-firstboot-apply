@@ -95,6 +95,10 @@ if d.get("layout"):
             kb += line + "\n"
     open("/etc/default/keyboard", "w").write(kb)
     sh("udevadm", "trigger", "--subsystem-match=input", "--action=change")
+    # the text console's keymap, built now (20 s on the H3) rather than at every start: console-setup
+    # rebuilds it whenever its cache is older than this file, and a board without a clock battery
+    # or network starts with an earlier time after a power cut
+    subprocess.run(["systemd-run", "--no-block", "--collect", "setupcon", "--save-only"])
 if d.get("zone"):
     sh("timedatectl", "set-timezone", d["zone"])
 wifi_note = ""
