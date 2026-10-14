@@ -653,7 +653,7 @@ class Wizard(Gtk.Window):
         if not hasattr(self, "current") or self.pages[self.current]["name"] == "apply":
             return
         if self.pages[self.current]["name"] == "skip":
-            self.data = {"skip": True}
+            self.data["skip"] = True   # the pages still read the rest of the data while they redraw
             self.show_page(self.index("apply"))
             self.spinner.start(); threading.Thread(target=self.apply, daemon=True).start()
             return
@@ -759,6 +759,10 @@ class Wizard(Gtk.Window):
         self.osk_win.move(self.geo.x, kb_top)
         tw, th = self.tab.get_size()
         self.tab.move(self.geo.x + self.geo.width - tw - 24, kb_top - th - 10)
+        # no window manager keeps it above: once, after a boot, the button stayed hidden until it was
+        # tapped (not reproduced since), the card's window having likely been raised over it
+        if self.tab.get_window():
+            self.tab.get_window().raise_()
 
     def fold_keyboard(self, fold):
         """fold=True slides the on-screen keyboard down off the screen, False slides it back up; the button
@@ -879,11 +883,14 @@ class Wizard(Gtk.Window):
         self.show_page(0)
 
     def on_monitors(self, *_):
-        """Screen re-plugged or resolution changed: light it up again and cover it again."""
-        subprocess.run(["xrandr", "--auto"], capture_output=True)
+        """Resolution changed (the HDMI hotplug handler owns the mode, this only follows it): cover the
+        screen again, and start the on-screen keyboard again at the new size, with its tab on it."""
         g = Gdk.Display.get_default().get_monitor(0).get_geometry()
         if (g.width, g.height) != (self.geo.width, self.geo.height):
             self.geo = g; self.move(g.x, g.y); self.resize(g.width, g.height)
+            if self.osk:
+                self.osk.terminate(); self.osk.wait(); self.osk = None
+                self.on_screen_keyboard()
 
     # ---- time zone and WiFi lists ------------------------------------------------------------------------
     def focus_lang(self):

@@ -5,8 +5,9 @@
 # turns it back on when the monitor shows up: a screen switched off and on, or
 # the half second the H3 HDMI drops its hotplug line each time an X server
 # starts (end of the first-boot wizard, log out, switch user), and the picture
-# never comes back. Every X server of the display manager is checked: switching
-# user starts a second one.
+# never comes back. A screen that is on is left alone: the H3 drops the same
+# line at every mode change, so a mode the user picked would be undone. Every
+# X server of the display manager is checked: switching user starts a second one.
 for auth in /run/lightdm/root/:*; do
     [ -e "$auth" ] || continue
     export DISPLAY="${auth##*/}" XAUTHORITY="$auth"
