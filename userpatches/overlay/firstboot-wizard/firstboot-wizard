@@ -653,7 +653,7 @@ class Wizard(Gtk.Window):
         if not hasattr(self, "current") or self.pages[self.current]["name"] == "apply":
             return
         if self.pages[self.current]["name"] == "skip":
-            self.data = {"skip": True}
+            self.data["skip"] = True   # the pages still read the rest of the data while they redraw
             self.show_page(self.index("apply"))
             self.spinner.start(); threading.Thread(target=self.apply, daemon=True).start()
             return
