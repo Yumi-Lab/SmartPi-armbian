@@ -879,11 +879,14 @@ class Wizard(Gtk.Window):
         self.show_page(0)
 
     def on_monitors(self, *_):
-        """Screen re-plugged or resolution changed: light it up again and cover it again."""
-        subprocess.run(["xrandr", "--auto"], capture_output=True)
+        """Resolution changed (the HDMI hotplug handler owns the mode, this only follows it): cover the
+        screen again, and start the on-screen keyboard again at the new size, with its tab on it."""
         g = Gdk.Display.get_default().get_monitor(0).get_geometry()
         if (g.width, g.height) != (self.geo.width, self.geo.height):
             self.geo = g; self.move(g.x, g.y); self.resize(g.width, g.height)
+            if self.osk:
+                self.osk.terminate(); self.osk.wait(); self.osk = None
+                self.on_screen_keyboard()
 
     # ---- time zone and WiFi lists ------------------------------------------------------------------------
     def focus_lang(self):
